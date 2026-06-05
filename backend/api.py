@@ -526,3 +526,216 @@ async def get_examples():
 async def health():
     return {"status": "ok", "version": "1.0.0"}
 
+
+# ============================================================
+# 报告相关接口
+# ============================================================
+
+@app.get("/api/report")
+async def get_report(format: str = "markdown", eval_id: str | None = None):
+    """获取评估报告。
+
+    Args:
+        format: "markdown" 或 "json"
+        eval_id: 指定评测结果文件名（不含扩展名）。默认取最新。
+    """
+    from src.report.eval_report_generator import generate_eval_report, render_report_markdown
+
+    pipeline_output = _load_eval_result(eval_id)
+    if pipeline_output is None:
+        raise HTTPException(status_code=404, detail="无评测结果，请先运行评测")
+
+    report = generate_eval_report(pipeline_output)
+
+    if format == "json":
+        return report
+    else:
+        markdown = render_report_markdown(report)
+        return {"markdown": markdown}
+
+
+@app.get("/api/report/download")
+async def download_report(format: str = "markdown", eval_id: str | None = None):
+    """下载报告文件。"""
+    from fastapi.responses import FileResponse
+    from src.report.eval_report_generator import generate_eval_report, render_report_markdown, write_eval_report
+
+    pipeline_output = _load_eval_result(eval_id)
+    if pipeline_output is None:
+        raise HTTPException(status_code=404, detail="无评测结果")
+
+    result = write_eval_report(pipeline_output, output_dir=PROJECT_ROOT / "data" / "reports")
+
+    if format == "json":
+        return FileResponse(
+            result["json"],
+            media_type="application/json",
+            filename=Path(result["json"]).name,
+        )
+    else:
+        return FileResponse(
+            result["markdown"],
+            media_type="text/markdown",
+            filename=Path(result["markdown"]).name,
+        )
+
+
+# ============================================================
+# 评测历史接口
+# ============================================================
+
+@app.get("/api/evaluations")
+async def list_evaluations():
+    """列出所有历史评测结果。"""
+    eval_dir = PROJECT_ROOT / "data" / "eval"
+    if not eval_dir.exists():
+        return {"evaluations": []}
+
+    results = []
+    for f in sorted(eval_dir.glob("eval_pipeline_*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+            task_id = data.get("parsed_task", {}).get("task_id", "unknown")
+            results.append({
+                "id": f.stem,
+                "task_id": task_id,
+                "scenario_count": data.get("scenario_count", 0),
+                "success_count": data.get("success_count", 0),
+                "created_at": data.get("started_at", ""),
+                "file": f.name,
+            })
+        except Exception:
+            pass
+
+    return {"evaluations": results[:20]}
+
+
+@app.get("/api/evaluations/{eval_id}")
+async def get_evaluation(eval_id: str):
+    """获取指定评测结果详情。"""
+    pipeline_output = _load_eval_result(eval_id)
+    if pipeline_output is None:
+        raise HTTPException(status_code=404, detail=f"未找到评测结果: {eval_id}")
+    return pipeline_output
+
+
+# ============================================================
+# 文件上传接口
+# ============================================================
+
+@app.post("/api/upload")
+async def upload_instruction(file: Any = None):
+    """上传任务指令文件（.txt/.md/.json/.xlsx/.csv）。
+
+    返回解析后的指令文本。
+    """
+    from fastapi import UploadFile, File
+
+    # 由于FastAPI的File依赖注入需要在参数声明，这里用替代方案
+    raise HTTPException(status_code=501, detail="请使用POST /api/evaluate直接传instruction文本")
+
+
+@app.post("/api/upload-file")
+async def upload_file(file: bytes = None):
+    """接收上传文件并返回文本内容。"""
+    from fastapi import UploadFile, File, Form
+    # 前端应将文件读为文本后传到 /api/evaluate 的 instruction 字段
+    # 此接口作为辅助：接收文件→返回文本
+    raise HTTPException(
+        status_code=501,
+        detail="前端请在客户端读取文件文本，直接POST到/api/evaluate。支持格式：.txt/.md/.json"
+    )
+
+
+# ============================================================
+# DSL/状态机接口（独立于SSE，供前端初始化或回看）
+# ============================================================
+
+@app.get("/api/dsl/state-names")
+async def get_state_names():
+    """获取状态机节点中文名映射。"""
+    return {"state_names": STATE_DISPLAY_NAMES, "dimension_labels": DIMENSION_DISPLAY}
+
+
+@app.post("/api/dsl/compile")
+async def compile_dsl_endpoint(instruction: str = ""):
+    """独立DSL编译接口（不触发完整评测）。
+
+    用于前端快速预览状态机图。
+    """
+    if not instruction.strip():
+        raise HTTPException(status_code=400, detail="instruction不能为空")
+
+    llm = DeepSeekClient()
+    parser = InstructionParser(llm)
+    parsed_task = parser.parse(instruction)
+    dsl = compile_dsl(parsed_task)
+
+    states_info = [
+        {"id": s.id, "label": STATE_DISPLAY_NAMES.get(s.id, s.id),
+         "terminal": s.terminal, "entry": s.entry,
+         "required_actions": s.required_actions,
+         "forbidden_actions": s.forbidden_actions}
+        for s in dsl.states
+    ]
+    edges_info = [
+        {"from": s.id, "to": tr.to,
+         "label": tr.when.intent or (tr.when.rule_keywords[0][:8] if tr.when.rule_keywords else ""),
+         "condition": {
+             "intent": tr.when.intent,
+             "keywords": tr.when.rule_keywords[:3],
+             "slots": tr.when.slot_equals,
+         }}
+        for s in dsl.states for tr in s.transitions
+    ]
+
+    return {
+        "task_id": dsl.task_id,
+        "role": dsl.role,
+        "objective": dsl.objective,
+        "states": states_info,
+        "edges": edges_info,
+        "state_count": len(dsl.states),
+        "edge_count": len(dsl.all_edges),
+        "mermaid": export_mermaid_statediagram(dsl),
+        "severity_rules": {
+            "p0": [{"id": r.id, "description": r.description} for r in dsl.severity_rules if r.level == "P0"],
+            "p1": [{"id": r.id, "description": r.description} for r in dsl.severity_rules if r.level == "P1"],
+        },
+        "atomic_requirements": [
+            {"id": r.id, "description": r.description, "bound_state": r.bound_to_state}
+            for r in dsl.atomic_requirements
+        ],
+        "global_constraints": {
+            "max_reply_chars": dsl.global_constraints.max_reply_chars,
+            "forbidden_phrases": dsl.global_constraints.forbidden_phrases,
+        },
+    }
+
+
+# ============================================================
+# 内部工具函数
+# ============================================================
+
+def _load_eval_result(eval_id: str | None = None) -> dict | None:
+    """加载评测结果JSON。eval_id为None时取最新。"""
+    eval_dir = PROJECT_ROOT / "data" / "eval"
+    if not eval_dir.exists():
+        return None
+
+    if eval_id:
+        target = eval_dir / f"{eval_id}.json"
+        if not target.exists():
+            # 尝试模糊匹配
+            matches = list(eval_dir.glob(f"*{eval_id}*.json"))
+            if matches:
+                target = matches[0]
+            else:
+                return None
+        return json.loads(target.read_text(encoding="utf-8"))
+    else:
+        files = sorted(eval_dir.glob("eval_pipeline_*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if not files:
+            return None
+        return json.loads(files[0].read_text(encoding="utf-8"))
+
