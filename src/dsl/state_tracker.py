@@ -155,12 +155,32 @@ class StateTracker:
         rule_intent = self._rule_intent(user_input)
         if rule_intent is not None:
             return rule_intent
+        # 轻量启发式替代LLM（加速模式）：问号=question，短回复=cooperative
+        heuristic = self._heuristic_intent(user_input)
+        if heuristic is not None:
+            return heuristic
         if self.llm is None:
             return IntentResult(
                 intent="cooperative", confidence=0.3, source="fallback",
                 rationale="no llm available",
             )
         return self._llm_intent(user_input, agent_history)
+
+    def _heuristic_intent(self, user_input: str) -> IntentResult | None:
+        """轻量启发式意图分类，避免LLM调用。覆盖80%常见情况。"""
+        text = (user_input or "").strip()
+        if not text:
+            return IntentResult(intent="silent_short", confidence=0.8, source="heuristic", rationale="empty_input")
+        if len(text) <= 4:
+            return IntentResult(intent="cooperative", confidence=0.7, source="heuristic", rationale="short_reply")
+        if "？" in text or "?" in text or "吗" in text or "怎么" in text or "什么" in text or "多少" in text:
+            return IntentResult(intent="question", confidence=0.75, source="heuristic", rationale="question_mark_or_interrogative")
+        if any(w in text for w in ["好的", "知道了", "行", "可以", "没问题", "明白", "嗯"]):
+            return IntentResult(intent="cooperative", confidence=0.8, source="heuristic", rationale="agreement_keyword")
+        if any(w in text for w in ["不行", "不好", "算了", "不用"]):
+            return IntentResult(intent="refusal", confidence=0.7, source="heuristic", rationale="soft_refusal_keyword")
+        # 无法判断时仍走LLM
+        return None
 
     def _rule_intent(self, user_input: str) -> IntentResult | None:
         text = user_input or ""

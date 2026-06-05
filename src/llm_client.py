@@ -29,17 +29,18 @@ class DeepSeekClient:
 
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
-    def chat(self, messages: list[dict], max_tokens: int = 150, temperature: float = 0.7) -> str:
+    def chat(self, messages: list[dict], max_tokens: int = 150, temperature: float = 0.7, timeout: int = 20) -> str:
         """发送对话请求，返回回复文本。空结果自动重试。"""
         import time
 
-        for attempt in range(3):
+        for attempt in range(2):  # 重试从3次降为2次加速
             try:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    timeout=timeout,
                 )
                 content = response.choices[0].message.content
                 if content and content.strip():
