@@ -44,7 +44,7 @@ export function useEvaluationSse() {
       const response = await fetch(`${API_BASE}/api/evaluate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction, budget: 8, warmup_ratio: 0.5, max_turns: 10 }),
+        body: JSON.stringify({ instruction, budget: 4, warmup_ratio: 0.5, max_turns: 6 }),
         signal: controller.signal,
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
