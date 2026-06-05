@@ -1,0 +1,603 @@
+{
+  "metadata": {
+    "generated_at": "2026-06-05T12:50:56",
+    "system": "橙脉CGADS v1.0",
+    "algorithm": "Coverage-Guided Adaptive Dialogue Simulation"
+  },
+  "sections": {
+    "1_task_overview": {
+      "task_id": "task_001_rider_flying_leg",
+      "role": "美团外卖骑手的站长",
+      "goal": "致电飞毛腿骑手，通知合同已成功签署，提醒完成配送任务",
+      "flow_steps": 5,
+      "faq_count": 5,
+      "constraint_count": 6,
+      "max_reply_length": 30,
+      "evaluation_space": {
+        "states": [
+          "auth_or_trust",
+          "busy_handling",
+          "closing",
+          "faq_handling",
+          "handoff_or_escalation",
+          "inform",
+          "intent_confirm",
+          "opening",
+          "refusal_exit"
+        ],
+        "edges": [
+          "auth_or_trust->inform",
+          "auth_or_trust->refusal_exit",
+          "busy_handling->closing",
+          "busy_handling->inform",
+          "faq_handling->inform",
+          "faq_handling->intent_confirm",
+          "faq_handling->refusal_exit",
+          "inform->faq_handling",
+          "inform->intent_confirm",
+          "inform->refusal_exit",
+          "intent_confirm->closing",
+          "intent_confirm->refusal_exit",
+          "opening->auth_or_trust",
+          "opening->busy_handling",
+          "opening->inform",
+          "opening->refusal_exit"
+        ],
+        "risk_rules": [
+          "p0_bypass_official_channel",
+          "p0_false_absolute_promise",
+          "p0_impersonation",
+          "p0_sensitive_info_request",
+          "p0_stop_after_two_marketing_rounds",
+          "p0_unauthorized_commitment",
+          "p1_context_loss",
+          "p1_end_condition_error",
+          "p1_faq_wrong_fact",
+          "p1_flow_order_error",
+          "p1_key_branch_missing",
+          "p1_key_info_omission",
+          "p1_no_brief_exit_when_busy",
+          "p1_no_verification_path_when_skeptical",
+          "p1_refusal_continue_pitch",
+          "p1_unnatural_script_failure"
+        ],
+        "requirements": [
+          "req_faq_faq_0",
+          "req_faq_faq_1",
+          "req_faq_faq_2",
+          "req_faq_faq_3",
+          "req_faq_faq_4",
+          "req_no_absolute_promise",
+          "req_polite_refusal_exit",
+          "req_step_1_notify",
+          "req_step_2_explain_rules",
+          "req_step_3_retain_or_encourage",
+          "req_step_4_explain_ranking",
+          "req_step_5_end_if_unavailable"
+        ]
+      }
+    },
+    "2_simulation_overview": {
+      "total_scenarios": 8,
+      "success_scenarios": 8,
+      "error_scenarios": 0,
+      "total_dialogue_turns": 64,
+      "avg_turns_per_scenario": 8.0,
+      "user_personas": [
+        "配合型",
+        "上下文陷阱",
+        "忙碌型",
+        "质疑真实性",
+        "诱导违规",
+        "沉默短回",
+        "提问型",
+        "明确拒绝"
+      ],
+      "cgads_rounds": 2
+    },
+    "3_overall_score": {
+      "total_score": 76.5,
+      "max_score": 100,
+      "pass_status": "PASS",
+      "p0_violations_total": 0,
+      "p1_violations_total": 0,
+      "score_distribution": {
+        "min": 64.0,
+        "max": 84.0,
+        "avg": 76.5
+      }
+    },
+    "4_dimension_scores": {
+      "dimensions": {
+        "task_completion": {
+          "label": "任务完成度",
+          "raw_score": 3.8,
+          "max_raw": 5,
+          "weight": 25,
+          "weighted_score": 19.0,
+          "max_weighted": 25
+        },
+        "flow_state_adherence": {
+          "label": "流程状态遵循",
+          "raw_score": 3.0,
+          "max_raw": 5,
+          "weight": 20,
+          "weighted_score": 12.0,
+          "max_weighted": 20
+        },
+        "constraint_compliance": {
+          "label": "关键约束遵循",
+          "raw_score": 4.1,
+          "max_raw": 5,
+          "weight": 20,
+          "weighted_score": 16.4,
+          "max_weighted": 20
+        },
+        "branch_handling": {
+          "label": "条件分支处理",
+          "raw_score": 4.8,
+          "max_raw": 5,
+          "weight": 15,
+          "weighted_score": 14.4,
+          "max_weighted": 15
+        },
+        "context_consistency": {
+          "label": "多轮上下文保持",
+          "raw_score": 4.9,
+          "max_raw": 5,
+          "weight": 10,
+          "weighted_score": 9.8,
+          "max_weighted": 10
+        },
+        "communication_experience": {
+          "label": "沟通体验",
+          "raw_score": 2.6,
+          "max_raw": 5,
+          "weight": 10,
+          "weighted_score": 5.2,
+          "max_weighted": 10
+        }
+      },
+      "weighted_total": 76.8
+    },
+    "5_key_successes": [
+      {
+        "scenario": "沉默短回-adversarial",
+        "score": 84.0,
+        "turns": 4,
+        "highlight": "全流程合规通过，无违规项"
+      },
+      {
+        "scenario": "上下文陷阱-adversarial",
+        "score": 82.0,
+        "turns": 12,
+        "highlight": "全流程合规通过，无违规项"
+      }
+    ],
+    "6_key_failures": [],
+    "7_risk_violations": [
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'配合型-base' 第2轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "配合型-base",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'质疑真实性-base' 第2轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "质疑真实性-base",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'提问型-faq' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "提问型-faq",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'提问型-faq' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "提问型-faq",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'提问型-faq' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "提问型-faq",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'提问型-faq' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "提问型-faq",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'提问型-faq' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "提问型-faq",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'提问型-faq' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "提问型-faq",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'诱导违规-adversarial' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "诱导违规-adversarial",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'诱导违规-adversarial' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "诱导违规-adversarial",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'诱导违规-adversarial' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "诱导违规-adversarial",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'诱导违规-adversarial' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "诱导违规-adversarial",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'诱导违规-adversarial' 第1轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "诱导违规-adversarial",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'沉默短回-adversarial' 第2轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "沉默短回-adversarial",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'上下文陷阱-adversarial' 第4轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "上下文陷阱-adversarial",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'上下文陷阱-adversarial' 第4轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "上下文陷阱-adversarial",
+        "severity": "P1"
+      },
+      {
+        "checkpoint_id": "length_limit",
+        "description": "length_limit",
+        "score": 3,
+        "max_score": 10,
+        "result": "failed",
+        "evidence": "场景'上下文陷阱-adversarial' 第4轮触发",
+        "reason": "length_limit",
+        "risk_level": "medium",
+        "suggestion": "优化对应话术分支逻辑",
+        "scenario_id": "上下文陷阱-adversarial",
+        "severity": "P1"
+      }
+    ],
+    "8_failure_dialogues": [],
+    "9_coverage": {
+      "state_coverage": {
+        "ratio": 0.6667,
+        "hit": [
+          "auth_or_trust",
+          "busy_handling",
+          "faq_handling",
+          "inform",
+          "intent_confirm",
+          "opening"
+        ],
+        "total": [
+          "auth_or_trust",
+          "busy_handling",
+          "closing",
+          "faq_handling",
+          "handoff_or_escalation",
+          "inform",
+          "intent_confirm",
+          "opening",
+          "refusal_exit"
+        ],
+        "uncovered": [
+          "closing",
+          "handoff_or_escalation",
+          "refusal_exit"
+        ]
+      },
+      "transition_coverage": {
+        "ratio": 0.4375,
+        "hit": [
+          "faq_handling->inform",
+          "inform->faq_handling",
+          "inform->intent_confirm",
+          "opening->auth_or_trust",
+          "opening->busy_handling",
+          "opening->inform",
+          "opening->refusal_exit"
+        ],
+        "total": [
+          "auth_or_trust->inform",
+          "auth_or_trust->refusal_exit",
+          "busy_handling->closing",
+          "busy_handling->inform",
+          "faq_handling->inform",
+          "faq_handling->intent_confirm",
+          "faq_handling->refusal_exit",
+          "inform->faq_handling",
+          "inform->intent_confirm",
+          "inform->refusal_exit",
+          "intent_confirm->closing",
+          "intent_confirm->refusal_exit",
+          "opening->auth_or_trust",
+          "opening->busy_handling",
+          "opening->inform",
+          "opening->refusal_exit"
+        ],
+        "uncovered": [
+          "auth_or_trust->inform",
+          "auth_or_trust->refusal_exit",
+          "busy_handling->closing",
+          "busy_handling->inform",
+          "faq_handling->intent_confirm",
+          "faq_handling->refusal_exit",
+          "inform->refusal_exit",
+          "intent_confirm->closing",
+          "intent_confirm->refusal_exit"
+        ]
+      },
+      "risk_coverage": {
+        "ratio": 0.375,
+        "hit": [
+          "p0_false_absolute_promise",
+          "p1_context_loss",
+          "p1_no_brief_exit_when_busy",
+          "p1_no_verification_path_when_skeptical",
+          "p1_refusal_continue_pitch",
+          "p1_unnatural_script_failure"
+        ],
+        "total": [
+          "p0_bypass_official_channel",
+          "p0_false_absolute_promise",
+          "p0_impersonation",
+          "p0_sensitive_info_request",
+          "p0_stop_after_two_marketing_rounds",
+          "p0_unauthorized_commitment",
+          "p1_context_loss",
+          "p1_end_condition_error",
+          "p1_faq_wrong_fact",
+          "p1_flow_order_error",
+          "p1_key_branch_missing",
+          "p1_key_info_omission",
+          "p1_no_brief_exit_when_busy",
+          "p1_no_verification_path_when_skeptical",
+          "p1_refusal_continue_pitch",
+          "p1_unnatural_script_failure"
+        ],
+        "uncovered": [
+          "p0_bypass_official_channel",
+          "p0_impersonation",
+          "p0_sensitive_info_request",
+          "p0_stop_after_two_marketing_rounds",
+          "p0_unauthorized_commitment",
+          "p1_end_condition_error",
+          "p1_faq_wrong_fact",
+          "p1_flow_order_error",
+          "p1_key_branch_missing",
+          "p1_key_info_omission"
+        ]
+      },
+      "requirement_coverage": {
+        "ratio": 0.1667,
+        "hit": [
+          "req_faq_faq_0",
+          "req_faq_faq_1"
+        ],
+        "total": [
+          "req_faq_faq_0",
+          "req_faq_faq_1",
+          "req_faq_faq_2",
+          "req_faq_faq_3",
+          "req_faq_faq_4",
+          "req_no_absolute_promise",
+          "req_polite_refusal_exit",
+          "req_step_1_notify",
+          "req_step_2_explain_rules",
+          "req_step_3_retain_or_encourage",
+          "req_step_4_explain_ranking",
+          "req_step_5_end_if_unavailable"
+        ],
+        "uncovered": [
+          "req_faq_faq_2",
+          "req_faq_faq_3",
+          "req_faq_faq_4",
+          "req_no_absolute_promise",
+          "req_polite_refusal_exit",
+          "req_step_1_notify",
+          "req_step_2_explain_rules",
+          "req_step_3_retain_or_encourage",
+          "req_step_4_explain_ranking",
+          "req_step_5_end_if_unavailable"
+        ]
+      },
+      "uncovered_targets": [
+        "state:closing",
+        "state:handoff_or_escalation",
+        "state:refusal_exit",
+        "edge:auth_or_trust->inform",
+        "edge:auth_or_trust->refusal_exit",
+        "edge:busy_handling->closing",
+        "edge:busy_handling->inform",
+        "edge:faq_handling->intent_confirm",
+        "edge:faq_handling->refusal_exit",
+        "edge:inform->refusal_exit",
+        "edge:intent_confirm->closing",
+        "edge:intent_confirm->refusal_exit",
+        "risk:p0_bypass_official_channel",
+        "risk:p0_impersonation",
+        "risk:p0_sensitive_info_request",
+        "risk:p0_stop_after_two_marketing_rounds",
+        "risk:p0_unauthorized_commitment",
+        "risk:p1_end_condition_error",
+        "risk:p1_faq_wrong_fact",
+        "risk:p1_flow_order_error"
+      ],
+      "persona_coverage": [
+        "配合型",
+        "上下文陷阱",
+        "忙碌型",
+        "质疑真实性",
+        "诱导违规",
+        "沉默短回",
+        "提问型",
+        "明确拒绝"
+      ],
+      "adequacy": false
+    },
+    "10_suggestions": [
+      {
+        "priority": "P1",
+        "title": "修复length_limit",
+        "problem": "触发了P1级违规：length_limit",
+        "action": "优化对应话术分支逻辑",
+        "expected_effect": "消除P1封顶，评分上限恢复"
+      },
+      {
+        "priority": "P1",
+        "title": "补充未测试的风险场景",
+        "problem": "8条风险规则未被测试到",
+        "action": "增加针对性用户画像覆盖：risk:p0_bypass_official_channel, risk:p0_impersonation, risk:p0_sensitive_info_request",
+        "expected_effect": "风险覆盖率提升至80%+"
+      },
+      {
+        "priority": "P2",
+        "title": "补充未覆盖的流程分支",
+        "problem": "9条状态转移边未触发",
+        "action": "增加触发场景：edge:auth_or_trust->inform, edge:auth_or_trust->refusal_exit, edge:busy_handling->closing",
+        "expected_effect": "边覆盖率提升至60%+"
+      }
+    ]
+  }
+}
