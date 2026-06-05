@@ -142,9 +142,6 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
           next.states = data.result?.states ?? []
           next.edges = data.result?.edges ?? []
         }
-        if (stage === 'scenario_gen') {
-          next.pipeline = setStep(next.pipeline!, 'dialogue', 'done', { result: { scenario_count: data.result?.total_scenarios } })
-        }
         if (stage === 'scoring') {
           next.score = {
             ...state.score,

@@ -1,26 +1,20 @@
-"""FastAPI SSE 后端 — 为 React 前端提供实时评测流式接口。
-
-启动：
-    uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
-
-SSE 事件流设计：
-    POST /api/evaluate  → SSE stream
-    GET  /api/examples  → 示例任务列表
-    GET  /api/health    → 健康检查
-"""
+﻿"""FastAPI SSE backend for realtime CGADS evaluation."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
 import time
 import traceback
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
-# 确保项目根目录在 path
+# 纭繚椤圭洰鏍圭洰褰曞湪 path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -45,6 +39,9 @@ from src.evaluators.llm_judge import LLMJudge
 from src.calibration.audit import compute_final_score
 from src.visualization.mermaid_export import export_mermaid_statediagram
 
+logger = logging.getLogger("cgads.api")
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+
 app = FastAPI(title="CGADS Evaluation API", version="1.0.0")
 
 app.add_middleware(
@@ -54,7 +51,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve React前端build产物（如果存在）
+# Serve React鍓嶇build浜х墿锛堝鏋滃瓨鍦級
 _frontend_dist = PROJECT_ROOT / "frontend" / "dist"
 
 
@@ -69,6 +66,25 @@ class EvalRequest(BaseModel):
     max_turns: int = 10
 
 
+class EvaluationJob:
+    def __init__(self, job_id: str, request: EvalRequest):
+        self.id = job_id
+        self.request = request
+        self.status = "queued"
+        self.created_at = datetime.now()
+        self.updated_at = self.created_at
+        self.events: list[str] = []
+        self.subscribers: set[asyncio.Queue[str | None]] = set()
+        self.task: asyncio.Task | None = None
+        self.error: str | None = None
+        self.eval_id: str | None = None
+        self.output_path: str | None = None
+
+
+EVALUATION_JOBS: dict[str, EvaluationJob] = {}
+MAX_JOB_EVENTS = 500
+
+
 # ============================================================
 # Helpers
 # ============================================================
@@ -77,6 +93,87 @@ def sse_event(event: str, data: Any) -> str:
     """Format a Server-Sent Event."""
     payload = json.dumps(data, ensure_ascii=False, default=str)
     return f"event: {event}\ndata: {payload}\n\n"
+
+
+def _parse_sse_chunk(chunk: str) -> tuple[str | None, dict[str, Any]]:
+    event = None
+    data: dict[str, Any] = {}
+    for line in chunk.splitlines():
+        if line.startswith("event:"):
+            event = line.split(":", 1)[1].strip()
+        elif line.startswith("data:"):
+            raw = line.split(":", 1)[1].strip()
+            try:
+                parsed = json.loads(raw)
+                data = parsed if isinstance(parsed, dict) else {"value": parsed}
+            except json.JSONDecodeError:
+                data = {"raw": raw}
+    return event, data
+
+
+async def _publish_job_event(job: EvaluationJob, chunk: str) -> None:
+    job.events.append(chunk)
+    if len(job.events) > MAX_JOB_EVENTS:
+        job.events = job.events[-MAX_JOB_EVENTS:]
+    job.updated_at = datetime.now()
+
+    event, data = _parse_sse_chunk(chunk)
+    if event == "pipeline_complete":
+        job.status = "completed"
+        job.eval_id = data.get("eval_id")
+        job.output_path = data.get("output_path")
+    elif event == "stage_error":
+        job.status = "failed"
+        job.error = str(data.get("error", "stage_error"))
+
+    for queue in list(job.subscribers):
+        await queue.put(chunk)
+
+
+async def _finish_job(job: EvaluationJob) -> None:
+    for queue in list(job.subscribers):
+        await queue.put(None)
+
+
+async def _run_evaluation_job(job: EvaluationJob) -> None:
+    job.status = "running"
+    job.updated_at = datetime.now()
+    try:
+        async for chunk in run_evaluation_stream(job.request):
+            await _publish_job_event(job, chunk)
+        if job.status == "running":
+            job.status = "completed"
+    except asyncio.CancelledError:
+        job.status = "cancelled"
+        job.updated_at = datetime.now()
+        await _publish_job_event(job, sse_event("stage_error", {"stage": "pipeline", "error": "cancelled"}))
+        raise
+    except Exception as exc:  # noqa: BLE001 - expose failure as a job event.
+        job.status = "failed"
+        job.error = str(exc)
+        logger.exception("evaluation job failed id=%s", job.id)
+        await _publish_job_event(job, sse_event("stage_error", {"stage": "pipeline", "error": str(exc)}))
+    finally:
+        job.updated_at = datetime.now()
+        await _finish_job(job)
+
+
+async def _job_event_stream(job: EvaluationJob) -> AsyncGenerator[str, None]:
+    for chunk in job.events:
+        yield chunk
+    if job.status in {"completed", "failed", "cancelled"}:
+        return
+
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+    job.subscribers.add(queue)
+    try:
+        while True:
+            chunk = await queue.get()
+            if chunk is None:
+                break
+            yield chunk
+    finally:
+        job.subscribers.discard(queue)
 
 
 def safe_serialize(obj: Any) -> Any:
@@ -90,6 +187,68 @@ def safe_serialize(obj: Any) -> Any:
     if isinstance(obj, set):
         return sorted(safe_serialize(i) for i in obj)
     return obj
+
+
+async def _chat_with_timeout(
+    llm: DeepSeekClient,
+    messages: list[dict[str, str]],
+    *,
+    fallback: str,
+    timeout_s: float = 8.0,
+    **kwargs: Any,
+) -> str:
+    """Run the blocking LLM client off the event loop with an API-level timeout."""
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(llm.chat, messages, timeout=int(timeout_s), **kwargs),
+            timeout=timeout_s + 1,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("llm chat timed out after %.1fs; using fallback", timeout_s)
+    except Exception as exc:  # noqa: BLE001 - realtime stream should degrade, not die.
+        logger.warning("llm chat failed with %s; using fallback", exc.__class__.__name__)
+    return fallback
+
+
+def _write_realtime_eval_result(
+    *,
+    parsed_task: dict[str, Any],
+    coverage_report: dict[str, Any],
+    uncovered_targets: list[Any],
+    scenario_results: list[dict[str, Any]],
+    started_at: datetime,
+    budget: int,
+    warmup_k: int,
+    rounds: int,
+) -> Path:
+    """Persist realtime SSE evaluation output in the offline pipeline format."""
+    valid_results = [r for r in scenario_results if not r.get("error")]
+    output = {
+        "pipeline_version": "eval_pipeline_v2_realtime",
+        "started_at": started_at.isoformat(timespec="seconds"),
+        "finished_at": datetime.now().isoformat(timespec="seconds"),
+        "parsed_task": safe_serialize(parsed_task),
+        "scenario_count": len(scenario_results),
+        "success_count": len(valid_results),
+        "error_count": len(scenario_results) - len(valid_results),
+        "budget": budget,
+        "warmup_k": warmup_k,
+        "cgads_rounds": rounds,
+        "coverage_report": safe_serialize(coverage_report),
+        "uncovered_targets": safe_serialize(uncovered_targets),
+        "scenario_results": safe_serialize(scenario_results),
+    }
+
+    out_dir = PROJECT_ROOT / "data" / "eval"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    task_id = str(parsed_task.get("task_id") or "unknown_task")
+    safe_task_id = "".join(ch if ch.isalnum() or ch in ("_", "-") else "_" for ch in task_id)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = out_dir / f"eval_pipeline_{safe_task_id}_{timestamp}.json"
+    output["output_path"] = str(output_path)
+    output_path.write_text(json.dumps(output, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    logger.info("realtime evaluation persisted path=%s", output_path)
+    return output_path
 
 
 STATE_DISPLAY_NAMES = {
@@ -119,12 +278,20 @@ DIMENSION_DISPLAY = {
 # ============================================================
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
-    """主评测流 — 逐步推送SSE事件。"""
+    """Stream realtime evaluation events."""
 
+    pipeline_started = time.time()
+    started_at = datetime.now()
+    logger.info(
+        "evaluation started budget=%s warmup_ratio=%s max_turns=%s instruction_chars=%s",
+        request.budget,
+        request.warmup_ratio,
+        request.max_turns,
+        len(request.instruction or ""),
+    )
     llm = DeepSeekClient()
 
-    # ═══ Stage 1: 指令解析 ═══
-    yield sse_event("stage_start", {"stage": "parsing", "label": "指令解析"})
+    # 鈺愨晲鈺?Stage 1: 鎸囦护瑙ｆ瀽 鈺愨晲鈺?    yield sse_event("stage_start", {"stage": "parsing", "label": "鎸囦护瑙ｆ瀽"})
     t0 = time.time()
     try:
         parser = InstructionParser(llm)
@@ -149,8 +316,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     await asyncio.sleep(0.1)
 
-    # ═══ Stage 2: DSL编译 ═══
-    yield sse_event("stage_start", {"stage": "dsl_compile", "label": "DSL编译"})
+    # 鈺愨晲鈺?Stage 2: DSL缂栬瘧 鈺愨晲鈺?    yield sse_event("stage_start", {"stage": "dsl_compile", "label": "DSL缂栬瘧"})
     t0 = time.time()
     try:
         dsl = compile_dsl(parsed_task)
@@ -189,8 +355,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     await asyncio.sleep(0.1)
 
-    # ═══ Stage 3: CGADS场景生成 ═══
-    yield sse_event("stage_start", {"stage": "scenario_gen", "label": "场景生成"})
+    # 鈺愨晲鈺?Stage 3: CGADS鍦烘櫙鐢熸垚 鈺愨晲鈺?    yield sse_event("stage_start", {"stage": "scenario_gen", "label": "鍦烘櫙鐢熸垚"})
     t0 = time.time()
 
     generator = CoverageDrivenScenarioGenerator(dsl)
@@ -207,7 +372,21 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         "scenarios": [{"name": s.get("name", ""), "targets": s.get("coverage_targets", [])} for s in scenarios_round1],
     })
 
-    # 跑Round 1 scenarios收集覆盖率
+    yield sse_event("stage_complete", {
+        "stage": "scenario_gen",
+        "duration_s": round(time.time() - t0, 2),
+        "result": {
+            "warmup_scenarios": len(scenarios_round1),
+            "budget": request.budget,
+        },
+    })
+
+    await asyncio.sleep(0.1)
+
+    yield sse_event("stage_start", {"stage": "dialogue", "label": "瀵硅瘽鎵ц"})
+    t0 = time.time()
+    logger.info("dialogue stage started warmup_scenarios=%s", len(scenarios_round1))
+
     scenario_results = []
     for idx, scenario in enumerate(scenarios_round1):
         result = await _run_single_scenario(scenario, idx, parsed_task, dsl, llm, request.max_turns)
@@ -238,7 +417,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             "p1_count": result.get("p1_count", 0),
         })
 
-    # Gap分析
+    # Gap鍒嗘瀽
     gaps = coverage_tracker.uncovered_targets()
     remaining_budget = request.budget - len(scenarios_round1)
 
@@ -291,7 +470,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     adequacy = not bool(coverage_tracker.uncovered_targets())
 
     yield sse_event("stage_complete", {
-        "stage": "scenario_gen",
+        "stage": "dialogue",
         "duration_s": duration,
         "result": {
             "total_scenarios": len(scenario_results),
@@ -300,24 +479,28 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             "adequacy": adequacy,
         },
     })
+    logger.info(
+        "dialogue stage completed scenarios=%s duration_s=%s total_duration_s=%.2f",
+        len(scenario_results),
+        duration,
+        time.time() - pipeline_started,
+    )
 
     await asyncio.sleep(0.1)
 
-    # ═══ Stage 4+5: 评测评分（已在场景运行中完成）═══
-    yield sse_event("stage_start", {"stage": "scoring", "label": "评测评分"})
+    # 鈺愨晲鈺?Stage 4+5: 璇勬祴璇勫垎锛堝凡鍦ㄥ満鏅繍琛屼腑瀹屾垚锛夆晲鈺愨晲
+    yield sse_event("stage_start", {"stage": "scoring", "label": "璇勬祴璇勫垎"})
 
-    # 汇总分数
     valid_results = [r for r in scenario_results if not r.get("error")]
     scores = [r.get("final_score", 0) for r in valid_results]
     avg_score = sum(scores) / len(scores) if scores else 0
 
-    # 汇总维度
     dim_avg = {}
     for dim in DIMENSION_DISPLAY:
         vals = [r.get("dimension_scores", {}).get(dim, 3) for r in valid_results if r.get("dimension_scores")]
         dim_avg[dim] = round(sum(vals) / len(vals), 1) if vals else 3.0
 
-    # 汇总violations
+    # 姹囨€籿iolations
     all_violations = []
     for r in valid_results:
         for v in r.get("violation_rule_ids", []):
@@ -326,7 +509,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     total_p0 = sum(r.get("p0_count", 0) for r in valid_results)
     total_p1 = sum(r.get("p1_count", 0) for r in valid_results)
 
-    # 判定pass_status
+    # 鍒ゅ畾pass_status
     if total_p0 > 0:
         pass_status = "FAIL_P0"
     elif total_p1 > 0:
@@ -349,8 +532,22 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         },
     })
 
-    # ═══ Final: pipeline完成 ═══
+    # Final: persist and publish completion.
+    rounds = 2 if gaps and remaining_budget > 0 else 1
+    output_path = _write_realtime_eval_result(
+        parsed_task=parsed_task,
+        coverage_report=final_coverage,
+        uncovered_targets=coverage_tracker.uncovered_targets(),
+        scenario_results=scenario_results,
+        started_at=started_at,
+        budget=request.budget,
+        warmup_k=warmup_k,
+        rounds=rounds,
+    )
+
     yield sse_event("pipeline_complete", {
+        "eval_id": output_path.stem,
+        "output_path": str(output_path),
         "total_score": round(avg_score, 1),
         "pass_status": pass_status,
         "coverage": final_coverage,
@@ -378,11 +575,14 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 async def _run_single_scenario(
     scenario: dict, index: int, parsed_task: dict, dsl: Any, llm: DeepSeekClient, max_turns: int
 ) -> dict:
-    """运行单个场景，返回结果dict。"""
+    """Run one realtime scenario and return a result dict."""
     scenario_id = scenario.get("name", f"scenario_{index:03d}")
     try:
+        scenario_started = time.time()
+        logger.info("scenario started id=%s index=%s max_turns=%s", scenario_id, index, max_turns)
         sim = create_simulator_from_scenario(scenario, llm)
-        state_tracker = StateTracker(dsl=dsl, llm=None)  # 纯规则模式：省80%延迟，规则关键词已覆盖主要意图
+        sim.llm = None  # Realtime API uses deterministic user fallback to avoid doubling LLM latency.
+        state_tracker = StateTracker(dsl=dsl, llm=None)  # 绾鍒欐ā寮忥細鐪?0%寤惰繜锛岃鍒欏叧閿瘝宸茶鐩栦富瑕佹剰鍥?        checker = AutoCheckerBuilder(parsed_task)
         checker = AutoCheckerBuilder(parsed_task)
 
         history: list[dict[str, str]] = []
@@ -394,6 +594,7 @@ async def _run_single_scenario(
         history.append({"role": "assistant", "content": agent_msg})
 
         for turn in range(1, max_turns + 1):
+            turn_started = time.time()
             user_reply = sim.respond(agent_msg)
             history.append({"role": "user", "content": user_reply})
 
@@ -410,10 +611,10 @@ async def _run_single_scenario(
             })
 
             # Agent reply
-            agent_msg = llm.chat([
-                {"role": "system", "content": f"你是{parsed_task.get('role','')}。目标:{parsed_task.get('goal','')[:30]}。只输出一句话不超{parsed_task.get('max_reply_length',30)}字。"},
+            agent_msg = await _chat_with_timeout(llm, [
+                {"role": "system", "content": f"你是{parsed_task.get('role','')}。目标:{parsed_task.get('goal','')[:30]}。只输出一句话，不超过{parsed_task.get('max_reply_length',30)}字。"},
                 *history[-6:]
-            ], max_tokens=150, temperature=0.3)
+            ], max_tokens=150, temperature=0.3, fallback="好的，我这边记录一下。")
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)
@@ -429,14 +630,19 @@ async def _run_single_scenario(
             if sim.should_hangup() or state_tracker.current_state in ("refusal_exit", "closing"):
                 break
 
+            logger.info(
+                "turn completed scenario=%s turn=%s state=%s duration_s=%.2f",
+                scenario_id,
+                turn,
+                state_tracker.current_state,
+                time.time() - turn_started,
+            )
             await asyncio.sleep(0.05)
 
         # Judge
         compliant_turns = sum(1 for r in rule_results_all if r["compliant"])
         total_turns = len(rule_results_all)
 
-        # 启发式评分（省掉LLM Judge调用，加速80%）
-        # 完整LLM Judge在离线pipeline中使用
         dim_scores = {
             "task_completion": 4 if total_turns >= 3 else 2,
             "flow_state_adherence": 4 if any(t.get("new_state") != "opening" for t in state_trace) else 2,
@@ -449,6 +655,13 @@ async def _run_single_scenario(
         p0_count = sum(1 for v in set(violation_ids) if "p0" in v)
         p1_count = sum(1 for v in set(violation_ids) if "p1" in v)
         final_score = compute_final_score(dim_scores, p0_count, p1_count)
+        logger.info(
+            "scenario completed id=%s turns=%s score=%s duration_s=%.2f",
+            scenario_id,
+            total_turns,
+            final_score,
+            time.time() - scenario_started,
+        )
 
         return {
             "scenario_id": scenario_id,
@@ -464,6 +677,7 @@ async def _run_single_scenario(
             "satisfied_requirements": [],
         }
     except Exception as exc:
+        logger.exception("scenario failed id=%s", scenario_id)
         return {
             "scenario_id": scenario_id,
             "error": str(exc),
@@ -480,7 +694,7 @@ async def _run_single_scenario(
 
 
 def _adapt_state_trace(trace: list[dict]) -> list:
-    """适配CoverageTracker需要的StateUpdate接口。"""
+    """Adapt trace dictionaries to CoverageTracker-like update objects."""
     class FakeUpdate:
         def __init__(self, d):
             self.new_state = d.get("new_state", "opening")
@@ -490,16 +704,15 @@ def _adapt_state_trace(trace: list[dict]) -> list:
 
 
 # ============================================================
-# Demo模式（预跑数据秒级返回，解决海外服务器API延迟问题）
-# ============================================================
+# Demo妯″紡锛堥璺戞暟鎹绾ц繑鍥烇紝瑙ｅ喅娴峰鏈嶅姟鍣ˋPI寤惰繜闂锛?# ============================================================
 
 async def run_demo_stream(task_id: str = "task_001") -> AsyncGenerator[str, None]:
-    """从预跑数据生成SSE流，模拟实时推送但秒级完成。"""
-    # 加载预跑结果
+    """Stream prerecorded demo data as SSE events."""
+    # 鍔犺浇棰勮窇缁撴灉
     eval_dir = PROJECT_ROOT / "data" / "eval"
     matches = sorted(eval_dir.glob(f"eval_pipeline_{task_id}*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not matches:
-        yield sse_event("stage_error", {"stage": "demo", "error": f"无预跑数据: {task_id}"})
+        yield sse_event("stage_error", {"stage": "demo", "error": f"鏃犻璺戞暟鎹? {task_id}"})
         return
 
     data = json.loads(matches[0].read_text(encoding="utf-8"))
@@ -508,7 +721,7 @@ async def run_demo_stream(task_id: str = "task_001") -> AsyncGenerator[str, None
     coverage_report = data.get("coverage_report", {})
 
     # Stage 1: parsing
-    yield sse_event("stage_start", {"stage": "parsing", "label": "指令解析"})
+    yield sse_event("stage_start", {"stage": "parsing", "label": "鎸囦护瑙ｆ瀽"})
     await asyncio.sleep(0.3)
     yield sse_event("stage_complete", {
         "stage": "parsing", "duration_s": 0.3,
@@ -525,7 +738,7 @@ async def run_demo_stream(task_id: str = "task_001") -> AsyncGenerator[str, None
 
     # Stage 2: DSL compile
     await asyncio.sleep(0.2)
-    yield sse_event("stage_start", {"stage": "dsl_compile", "label": "DSL编译"})
+    yield sse_event("stage_start", {"stage": "dsl_compile", "label": "DSL缂栬瘧"})
     try:
         dsl = compile_dsl(parsed_task)
         states_info = [
@@ -555,7 +768,7 @@ async def run_demo_stream(task_id: str = "task_001") -> AsyncGenerator[str, None
 
     # Stage 3: scenarios
     await asyncio.sleep(0.2)
-    yield sse_event("stage_start", {"stage": "scenario_gen", "label": "场景生成"})
+    yield sse_event("stage_start", {"stage": "scenario_gen", "label": "鍦烘櫙鐢熸垚"})
 
     valid_results = [r for r in scenario_results if not r.get("error")]
     scenario_names = [{"name": r.get("scenario_id", ""), "targets": []} for r in valid_results[:4]]
@@ -601,7 +814,7 @@ async def run_demo_stream(task_id: str = "task_001") -> AsyncGenerator[str, None
 
     # Stage 4: scoring
     await asyncio.sleep(0.2)
-    yield sse_event("stage_start", {"stage": "scoring", "label": "评测评分"})
+    yield sse_event("stage_start", {"stage": "scoring", "label": "璇勬祴璇勫垎"})
 
     scores = [r.get("final_score", 0) for r in valid_results]
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0
@@ -643,7 +856,7 @@ async def run_demo_stream(task_id: str = "task_001") -> AsyncGenerator[str, None
              "score": r.get("final_score", 0), "p0": r.get("p0_count", 0), "p1": r.get("p1_count", 0)}
             for r in valid_results
         ],
-        "suggestions": ["针对未覆盖风险补充话术分支", "对P1场景增加拒绝退出逻辑", "补充覆盖率缺口用户画像"],
+        "suggestions": ["补充未覆盖风险话术", "增强拒绝退出逻辑", "补充覆盖率缺口用户画像"],
     })
 
 
@@ -651,9 +864,68 @@ async def run_demo_stream(task_id: str = "task_001") -> AsyncGenerator[str, None
 # Routes
 # ============================================================
 
+@app.post("/api/evaluate/jobs")
+async def create_evaluation_job(request: EvalRequest):
+    """Create an evaluation job and return immediately."""
+    job_id = uuid.uuid4().hex
+    job = EvaluationJob(job_id, request)
+    EVALUATION_JOBS[job_id] = job
+    job.task = asyncio.create_task(_run_evaluation_job(job))
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "created_at": job.created_at.isoformat(timespec="seconds"),
+    }
+
+
+@app.get("/api/evaluate/jobs/{job_id}")
+async def get_evaluation_job(job_id: str):
+    """Return evaluation job status."""
+    job = EVALUATION_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="evaluation job not found")
+    return {
+        "job_id": job.id,
+        "status": job.status,
+        "created_at": job.created_at.isoformat(timespec="seconds"),
+        "updated_at": job.updated_at.isoformat(timespec="seconds"),
+        "event_count": len(job.events),
+        "eval_id": job.eval_id,
+        "output_path": job.output_path,
+        "error": job.error,
+    }
+
+
+@app.get("/api/evaluate/jobs/{job_id}/events")
+async def stream_evaluation_job_events(job_id: str):
+    """Stream events for an existing evaluation job."""
+    job = EVALUATION_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="evaluation job not found")
+    return StreamingResponse(
+        _job_event_stream(job),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.delete("/api/evaluate/jobs/{job_id}")
+async def cancel_evaluation_job(job_id: str):
+    """Cancel a running evaluation job."""
+    job = EVALUATION_JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="evaluation job not found")
+    if job.task and not job.task.done():
+        job.task.cancel()
+    job.status = "cancelled"
+    job.updated_at = datetime.now()
+    await _finish_job(job)
+    return {"job_id": job.id, "status": job.status}
+
+
 @app.post("/api/evaluate")
 async def evaluate(request: EvalRequest):
-    """主评测接口 — 返回SSE事件流。"""
+    """Return realtime evaluation SSE stream."""
     return StreamingResponse(
         run_evaluation_stream(request),
         media_type="text/event-stream",
@@ -664,7 +936,7 @@ async def evaluate(request: EvalRequest):
 @app.get("/api/demo")
 @app.post("/api/demo")
 async def demo_evaluate(task_id: str = "task_001_rider_flying_leg"):
-    """Demo模式 — 从预跑数据秒级返回SSE流。用于演示/评审。"""
+    """Return demo SSE stream from prerecorded data."""
     return StreamingResponse(
         run_demo_stream(task_id),
         media_type="text/event-stream",
@@ -674,7 +946,7 @@ async def demo_evaluate(task_id: str = "task_001_rider_flying_leg"):
 
 @app.get("/api/examples")
 async def get_examples():
-    """返回示例任务列表。"""
+    """Return example task metadata."""
     examples_dir = PROJECT_ROOT / "data" / "processed"
     examples = []
     if examples_dir.exists():
@@ -698,22 +970,17 @@ async def health():
 
 
 # ============================================================
-# 报告相关接口
+# 鎶ュ憡鐩稿叧鎺ュ彛
 # ============================================================
 
 @app.get("/api/report")
 async def get_report(format: str = "markdown", eval_id: str | None = None):
-    """获取评估报告。
-
-    Args:
-        format: "markdown" 或 "json"
-        eval_id: 指定评测结果文件名（不含扩展名）。默认取最新。
-    """
+    """Return generated report for the latest or selected evaluation."""
     from src.report.eval_report_generator import generate_eval_report, render_report_markdown
 
     pipeline_output = _load_eval_result(eval_id)
     if pipeline_output is None:
-        raise HTTPException(status_code=404, detail="无评测结果，请先运行评测")
+        raise HTTPException(status_code=404, detail="鏃犺瘎娴嬬粨鏋滐紝璇峰厛杩愯璇勬祴")
 
     report = generate_eval_report(pipeline_output)
 
@@ -726,7 +993,7 @@ async def get_report(format: str = "markdown", eval_id: str | None = None):
 
 @app.get("/api/report/download")
 async def download_report(format: str = "markdown", eval_id: str | None = None):
-    """下载报告文件。"""
+    """Download generated report."""
     from fastapi.responses import FileResponse
     from src.report.eval_report_generator import generate_eval_report, render_report_markdown, write_eval_report
 
@@ -751,12 +1018,12 @@ async def download_report(format: str = "markdown", eval_id: str | None = None):
 
 
 # ============================================================
-# 评测历史接口
+# 璇勬祴鍘嗗彶鎺ュ彛
 # ============================================================
 
 @app.get("/api/evaluations")
 async def list_evaluations():
-    """列出所有历史评测结果。"""
+    """List evaluation history."""
     eval_dir = PROJECT_ROOT / "data" / "eval"
     if not eval_dir.exists():
         return {"evaluations": []}
@@ -782,59 +1049,47 @@ async def list_evaluations():
 
 @app.get("/api/evaluations/{eval_id}")
 async def get_evaluation(eval_id: str):
-    """获取指定评测结果详情。"""
+    """Return one evaluation result."""
     pipeline_output = _load_eval_result(eval_id)
     if pipeline_output is None:
-        raise HTTPException(status_code=404, detail=f"未找到评测结果: {eval_id}")
+        raise HTTPException(status_code=404, detail=f"鏈壘鍒拌瘎娴嬬粨鏋? {eval_id}")
     return pipeline_output
 
 
 # ============================================================
-# 文件上传接口
+# 鏂囦欢涓婁紶鎺ュ彛
 # ============================================================
 
 @app.post("/api/upload")
 async def upload_instruction(file: Any = None):
-    """上传任务指令文件（.txt/.md/.json/.xlsx/.csv）。
-
-    返回解析后的指令文本。
-    """
-    from fastapi import UploadFile, File
-
-    # 由于FastAPI的File依赖注入需要在参数声明，这里用替代方案
-    raise HTTPException(status_code=501, detail="请使用POST /api/evaluate直接传instruction文本")
+    """Upload an instruction file and return extracted text."""
+    raise HTTPException(status_code=501, detail="璇蜂娇鐢≒OST /api/evaluate鐩存帴浼爄nstruction鏂囨湰")
 
 
 @app.post("/api/upload-file")
 async def upload_file(file: bytes = None):
-    """接收上传文件并返回文本内容。"""
+    """Return uploaded file text."""
     from fastapi import UploadFile, File, Form
-    # 前端应将文件读为文本后传到 /api/evaluate 的 instruction 字段
-    # 此接口作为辅助：接收文件→返回文本
     raise HTTPException(
         status_code=501,
-        detail="前端请在客户端读取文件文本，直接POST到/api/evaluate。支持格式：.txt/.md/.json"
+        detail="前端请在客户端读取文件文本，直接POST到/api/evaluate。",
     )
 
 
 # ============================================================
-# DSL/状态机接口（独立于SSE，供前端初始化或回看）
-# ============================================================
+# DSL/鐘舵€佹満鎺ュ彛锛堢嫭绔嬩簬SSE锛屼緵鍓嶇鍒濆鍖栨垨鍥炵湅锛?# ============================================================
 
 @app.get("/api/dsl/state-names")
 async def get_state_names():
-    """获取状态机节点中文名映射。"""
+    """Return display labels for states and dimensions."""
     return {"state_names": STATE_DISPLAY_NAMES, "dimension_labels": DIMENSION_DISPLAY}
 
 
 @app.post("/api/dsl/compile")
 async def compile_dsl_endpoint(instruction: str = ""):
-    """独立DSL编译接口（不触发完整评测）。
-
-    用于前端快速预览状态机图。
-    """
+    """Compile DSL preview without running evaluation."""
     if not instruction.strip():
-        raise HTTPException(status_code=400, detail="instruction不能为空")
+        raise HTTPException(status_code=400, detail="instruction涓嶈兘涓虹┖")
 
     llm = DeepSeekClient()
     parser = InstructionParser(llm)
@@ -884,11 +1139,11 @@ async def compile_dsl_endpoint(instruction: str = ""):
 
 
 # ============================================================
-# 内部工具函数
+# 鍐呴儴宸ュ叿鍑芥暟
 # ============================================================
 
 def _load_eval_result(eval_id: str | None = None) -> dict | None:
-    """加载评测结果JSON。eval_id为None时取最新。"""
+    """Load persisted evaluation JSON."""
     eval_dir = PROJECT_ROOT / "data" / "eval"
     if not eval_dir.exists():
         return None
@@ -896,7 +1151,7 @@ def _load_eval_result(eval_id: str | None = None) -> dict | None:
     if eval_id:
         target = eval_dir / f"{eval_id}.json"
         if not target.exists():
-            # 尝试模糊匹配
+            # 灏濊瘯妯＄硦鍖归厤
             matches = list(eval_dir.glob(f"*{eval_id}*.json"))
             if matches:
                 target = matches[0]
@@ -911,24 +1166,19 @@ def _load_eval_result(eval_id: str | None = None) -> dict | None:
 
 
 # ============================================================
-# 静态文件挂载（必须在所有API路由之后）
-# ============================================================
+# 闈欐€佹枃浠舵寕杞斤紙蹇呴』鍦ㄦ墍鏈堿PI璺敱涔嬪悗锛?# ============================================================
 if _frontend_dist.exists():
     from starlette.responses import FileResponse as _FR
     from fastapi.staticfiles import StaticFiles
 
-    # 挂载assets子目录
     _assets_dir = _frontend_dist / "assets"
     if _assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
 
-    # 所有非/api路径 fallback 到 index.html（SPA路由支持）
     @app.get("/{full_path:path}")
     async def _serve_spa(full_path: str):
-        # 如果是文件（如 favicon.svg），直接返回
         file_path = _frontend_dist / full_path
         if file_path.is_file():
             return _FR(str(file_path))
-        # 否则返回index.html（React Router处理）
         return _FR(str(_frontend_dist / "index.html"))
 

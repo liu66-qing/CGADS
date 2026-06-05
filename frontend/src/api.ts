@@ -46,12 +46,15 @@ export function compileDslPreview(instruction: string) {
   })
 }
 
-export function getReportMarkdown() {
-  return requestJson<{ markdown: string }>('/api/report')
+export function getReportMarkdown(evalId?: string) {
+  const suffix = evalId ? `?eval_id=${encodeURIComponent(evalId)}` : ''
+  return requestJson<{ markdown: string }>(`/api/report${suffix}`)
 }
 
-export function getReportJson() {
-  return requestJson<Record<string, unknown>>('/api/report?format=json')
+export function getReportJson(evalId?: string) {
+  const params = new URLSearchParams({ format: 'json' })
+  if (evalId) params.set('eval_id', evalId)
+  return requestJson<Record<string, unknown>>(`/api/report?${params.toString()}`)
 }
 
 export function getReportDownloadUrl(format: 'markdown' | 'json') {
@@ -64,4 +67,18 @@ export function getEvaluations() {
 
 export function getEvaluation(id: string) {
   return requestJson<Record<string, unknown>>(`/api/evaluations/${encodeURIComponent(id)}`)
+}
+
+export function createEvaluationJob(instruction: string) {
+  return requestJson<{ job_id: string; status: string }>('/api/evaluate/jobs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instruction, budget: 4, warmup_ratio: 0.5, max_turns: 6 }),
+  })
+}
+
+export function cancelEvaluationJob(jobId: string) {
+  return requestJson<{ job_id: string; status: string }>(`/api/evaluate/jobs/${encodeURIComponent(jobId)}`, {
+    method: 'DELETE',
+  })
 }

@@ -1,6 +1,6 @@
-import { useRef } from 'react'
+﻿import { useRef } from 'react'
 import { useEvaluationStore } from '../store/evaluationStore'
-import { API_BASE, getEvaluations, getReportJson, getReportMarkdown } from '../api'
+import { API_BASE, cancelEvaluationJob, createEvaluationJob, getEvaluations, getReportJson, getReportMarkdown } from '../api'
 
 async function streamEvents(response: Response, onEvent: (event: string, data: any) => void) {
   const reader = response.body?.getReader()
@@ -26,6 +26,7 @@ async function streamEvents(response: Response, onEvent: (event: string, data: a
 
 export function useEvaluationSse() {
   const abortRef = useRef<AbortController | null>(null)
+  const jobRef = useRef<string | null>(null)
   const resetRun = useEvaluationStore((s) => s.resetRun)
   const setRunning = useEvaluationStore((s) => s.setRunning)
   const handleEvent = useEvaluationStore((s) => s.handleEvent)
@@ -34,25 +35,40 @@ export function useEvaluationSse() {
   const setEvaluations = useEvaluationStore((s) => s.setEvaluations)
   const setBackendStatus = useEvaluationStore((s) => s.setBackendStatus)
 
-  const start = async (instruction: string) => {
+  const start = async (instruction: string, demoMode: boolean = false) => {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
     resetRun()
 
     try {
-      const response = await fetch(`${API_BASE}/api/evaluate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction, budget: 4, warmup_ratio: 0.5, max_turns: 6 }),
-        signal: controller.signal,
-      })
+      let response: Response
+      let evalId: string | undefined
+
+      if (demoMode) {
+        response = await fetch(`${API_BASE}/api/demo?task_id=task_001_rider_flying_leg`, {
+          method: 'GET',
+          signal: controller.signal,
+        })
+      } else {
+        const job = await createEvaluationJob(instruction)
+        jobRef.current = job.job_id
+        response = await fetch(`${API_BASE}/api/evaluate/jobs/${encodeURIComponent(job.job_id)}/events`, {
+          method: 'GET',
+          signal: controller.signal,
+        })
+      }
+
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      await streamEvents(response, handleEvent)
+      await streamEvents(response, (event, data) => {
+        if (event === 'pipeline_complete' && data?.eval_id) evalId = data.eval_id
+        handleEvent(event, data)
+      })
+
       try {
         const [report, reportJson, evaluations] = await Promise.all([
-          getReportMarkdown(),
-          getReportJson(),
+          getReportMarkdown(evalId),
+          getReportJson(evalId),
           getEvaluations(),
         ])
         setReportMarkdown(report.markdown ?? '')
@@ -67,12 +83,17 @@ export function useEvaluationSse() {
         handleEvent('stage_error', { stage: 'parsing', error: (error as Error).message })
       }
     } finally {
+      jobRef.current = null
       setRunning(false)
     }
   }
 
   const stop = () => {
     abortRef.current?.abort()
+    if (jobRef.current) {
+      void cancelEvaluationJob(jobRef.current).catch(() => undefined)
+      jobRef.current = null
+    }
     setRunning(false)
   }
 
