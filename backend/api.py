@@ -56,12 +56,6 @@ app.add_middleware(
 
 # Serve React前端build产物（如果存在）
 _frontend_dist = PROJECT_ROOT / "frontend" / "dist"
-if _frontend_dist.exists():
-    from fastapi.staticfiles import StaticFiles
-    # API路由优先，静态文件兜底
-    @app.on_event("startup")
-    async def _mount_frontend():
-        app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
 
 
 # ============================================================
@@ -747,4 +741,27 @@ def _load_eval_result(eval_id: str | None = None) -> dict | None:
         if not files:
             return None
         return json.loads(files[0].read_text(encoding="utf-8"))
+
+
+# ============================================================
+# 静态文件挂载（必须在所有API路由之后）
+# ============================================================
+if _frontend_dist.exists():
+    from starlette.responses import FileResponse as _FR
+    from fastapi.staticfiles import StaticFiles
+
+    # 挂载assets子目录
+    _assets_dir = _frontend_dist / "assets"
+    if _assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+    # 所有非/api路径 fallback 到 index.html（SPA路由支持）
+    @app.get("/{full_path:path}")
+    async def _serve_spa(full_path: str):
+        # 如果是文件（如 favicon.svg），直接返回
+        file_path = _frontend_dist / full_path
+        if file_path.is_file():
+            return _FR(str(file_path))
+        # 否则返回index.html（React Router处理）
+        return _FR(str(_frontend_dist / "index.html"))
 
