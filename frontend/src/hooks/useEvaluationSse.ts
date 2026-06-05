@@ -51,12 +51,21 @@ export function useEvaluationSse() {
           signal: controller.signal,
         })
       } else {
-        const job = await createEvaluationJob(instruction)
-        jobRef.current = job.job_id
-        response = await fetch(`${API_BASE}/api/evaluate/jobs/${encodeURIComponent(job.job_id)}/events`, {
-          method: 'GET',
-          signal: controller.signal,
-        })
+        try {
+          const job = await createEvaluationJob(instruction)
+          jobRef.current = job.job_id
+          response = await fetch(`${API_BASE}/api/evaluate/jobs/${encodeURIComponent(job.job_id)}/events`, {
+            method: 'GET',
+            signal: controller.signal,
+          })
+        } catch {
+          response = await fetch(`${API_BASE}/api/evaluate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ instruction, budget: 4, warmup_ratio: 0.5, max_turns: 6 }),
+            signal: controller.signal,
+          })
+        }
       }
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -80,7 +89,7 @@ export function useEvaluationSse() {
       }
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
-        handleEvent('stage_error', { stage: 'parsing', error: (error as Error).message })
+        handleEvent('stage_error', { stage: 'pipeline', error: (error as Error).message })
       }
     } finally {
       jobRef.current = null

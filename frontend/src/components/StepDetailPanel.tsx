@@ -1,7 +1,7 @@
 import { useEvaluationStore } from '../store/evaluationStore'
 
 export function StepDetailPanel() {
-  const active = useEvaluationStore((s) => s.pipeline.find((p) => p.status === 'running') ?? s.pipeline.find((p) => p.status === 'done') ?? s.pipeline[0])
+  const active = useEvaluationStore((s) => s.pipeline.find((p) => p.status === 'error') ?? s.pipeline.find((p) => p.status === 'running') ?? s.pipeline.find((p) => p.status === 'done') ?? s.pipeline[0])
   const rounds = useEvaluationStore((s) => s.rounds)
   const gaps = useEvaluationStore((s) => s.gaps)
   const coverage = useEvaluationStore((s) => s.coverage)

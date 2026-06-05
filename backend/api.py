@@ -291,7 +291,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     )
     llm = DeepSeekClient()
 
-    # 鈺愨晲鈺?Stage 1: 鎸囦护瑙ｆ瀽 鈺愨晲鈺?    yield sse_event("stage_start", {"stage": "parsing", "label": "鎸囦护瑙ｆ瀽"})
+    yield sse_event("stage_start", {"stage": "parsing", "label": "指令解析"})
     t0 = time.time()
     try:
         parser = InstructionParser(llm)
@@ -316,7 +316,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     await asyncio.sleep(0.1)
 
-    # 鈺愨晲鈺?Stage 2: DSL缂栬瘧 鈺愨晲鈺?    yield sse_event("stage_start", {"stage": "dsl_compile", "label": "DSL缂栬瘧"})
+    yield sse_event("stage_start", {"stage": "dsl_compile", "label": "DSL编译"})
     t0 = time.time()
     try:
         dsl = compile_dsl(parsed_task)
@@ -355,7 +355,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     await asyncio.sleep(0.1)
 
-    # 鈺愨晲鈺?Stage 3: CGADS鍦烘櫙鐢熸垚 鈺愨晲鈺?    yield sse_event("stage_start", {"stage": "scenario_gen", "label": "鍦烘櫙鐢熸垚"})
+    yield sse_event("stage_start", {"stage": "scenario_gen", "label": "场景生成"})
     t0 = time.time()
 
     generator = CoverageDrivenScenarioGenerator(dsl)
