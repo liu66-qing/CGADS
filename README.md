@@ -251,7 +251,7 @@ python -X utf8 run_eval_pipeline.py \
 
 ## 团队
 
-**产品小队** · 美团AI Hackathon 2026
+**对对队** · 美团AI Hackathon 2026
 
 ---
 
