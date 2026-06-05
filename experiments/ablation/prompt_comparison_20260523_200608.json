@@ -1,0 +1,254 @@
+{
+  "v1_baseline": {
+    "total_turns": 4,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "好的站长，我现在就准备上线，高峰期肯定在。",
+          "agent_reply": "好的，提醒你单日合同需连续 Y 天完成，否则影响后续资格。",
+          "cohesion": 3,
+          "knowledge": 3,
+          "compliance": 3,
+          "progress": 3,
+          "comment": "评测解析失败"
+        },
+        {
+          "turn": 2,
+          "user_input": "明白了，那单日合同要连续多少天？我得记清楚。",
+          "agent_reply": "连续 Y 天，一天都不能少，不然合同就保不住了。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "回复精准接住用户询问，未编造信息，字数合规，强化了合同完成的必要性，有效推进任务。"
+        },
+        {
+          "turn": 3,
+          "user_input": "好的，知道了。Y是几天？我记一下就去跑单。",
+          "agent_reply": "Y天就是${Y}天，断一天名额就可能被占。路上注意安全。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "直接回答了Y的天数，准确传达了断一天的风险，自然收尾且提醒注意安全，完全衔接用户意图。"
+        },
+        {
+          "turn": 4,
+          "user_input": "好的，${Y}天，记住了。那我先去跑单了，谢谢站长。",
+          "agent_reply": "好的，开工顺利，路上小心。有问题随时联系我。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "亲切自然地结束通话，呼应骑手上线跑单，鼓励并提醒安全，推进任务圆满收尾。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": true,
+        "natural_ending": true,
+        "faq_handled": true,
+        "flow_followed": true,
+        "user_experience": 4,
+        "overall": 4,
+        "strengths": [
+          "清晰告知了飞毛腿合同已生效及关键要求",
+          "对骑手关于连续天数的追问给予了准确、耐心的回答",
+          "结尾表达了安全关怀，通话自然结束"
+        ],
+        "weaknesses": [
+          "未主动询问骑手是否对配送有顾虑，缺少挽留和鼓励环节",
+          "未说明飞毛腿报名按排名进行、非站长直接决定，可能让骑手对资格机制产生误解"
+        ],
+        "suggestions": [
+          "在通话中可增加一句如“最近单量有压力吗？有什么困难可以和我说”，以便及时挽留和鼓励",
+          "补充说明飞毛腿资格按排名自动生效，避免骑手以为站长可以随意取消合同"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 4.5,
+        "avg_knowledge": 4.5,
+        "avg_compliance": 4.5,
+        "avg_progress": 4.5
+      }
+    }
+  },
+  "v2_flow_enforced": {
+    "total_turns": 2,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "收到，我记下了，中午晚上都上线。今天几点开始？",
+          "agent_reply": "今天上午10点生效了。单日合同得连续跑Y天，注意别断啊。",
+          "cohesion": 5,
+          "knowledge": 1,
+          "compliance": 3,
+          "progress": 2,
+          "comment": "答对了时间，但把单日合同说成连续跑Y天，与FAQ不符；且未询问能否开始配送，未推进流程。"
+        },
+        {
+          "turn": 2,
+          "user_input": "没问题，X单我肯定跑满，飞毛腿嘛，跑得快！",
+          "agent_reply": "行，要的就是这股劲儿。连续Y天跑稳了！",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "夸赞接住用户豪言，轻松再次强化连续配送要求，推进自然。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": true,
+        "natural_ending": false,
+        "faq_handled": true,
+        "flow_followed": false,
+        "user_experience": 4,
+        "overall": 3,
+        "strengths": [
+          "积极鼓励骑手，语气匹配场景",
+          "准确回应用户关于生效时间的提问"
+        ],
+        "weaknesses": [
+          "遗漏‘报名按排名进行，非站点直接安排’的说明",
+          "结尾缺少正式告别，略显仓促"
+        ],
+        "suggestions": [
+          "在告知合同要求后，补充说明飞毛腿选拔逻辑（排名制非站点指派），管理预期",
+          "结束时增加确认与道别环节，如‘还有其他问题吗？好的，再见’"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 5.0,
+        "avg_knowledge": 3.0,
+        "avg_compliance": 4.0,
+        "avg_progress": 3.5
+      }
+    }
+  },
+  "v3_empathy": {
+    "total_turns": 4,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "哦，好的站长，我记住了。那现在就开始跑吗？",
+          "agent_reply": "对，今天生效，可以开跑。但必须连跑Y天，断一天合同就黄了。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "回复自然接住用户问题，并准确传达了多日合同要求，符合流程。"
+        },
+        {
+          "turn": 2,
+          "user_input": "行，那我先上线了。今天肯定能完成任务，设备都准备好了。",
+          "agent_reply": "好的，装备齐全就开干。现在单量正好，路上注意安全！",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "回复自然接住用户上线意愿，鼓励并提醒安全，完全符合流程约束。"
+        },
+        {
+          "turn": 3,
+          "user_input": "好嘞！我这就出发，路上车多会注意的。",
+          "agent_reply": "收到。路上注意安全，每天任务得稳住。有事随时找我。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "自然承接了用户的出发表态，安全提醒和任务叮嘱到位，符合流程且字数控制得当。"
+        },
+        {
+          "turn": 4,
+          "user_input": "没问题站长，保证跑满天数。有情况我随时找您。",
+          "agent_reply": "好，稳得住就能拿奖励。路上小心，先挂了。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "回复自然承接用户决心，用额外奖励正向鼓励，结束语简洁得体，完全符合流程和约束。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": true,
+        "natural_ending": true,
+        "faq_handled": true,
+        "flow_followed": false,
+        "user_experience": 5,
+        "overall": 4,
+        "strengths": [
+          "通话节奏简洁高效，直接告知骑手合同生效及上线要求",
+          "全程关怀安全，语气自然亲切，有效增强骑手配合意愿"
+        ],
+        "weaknesses": [
+          "遗漏流程要点：未说明飞毛腿报名按排名进行、非站长直接指派",
+          "未明确强调合同已签署（仅提到“已报名”和“今天生效”），可能让骑手对合同状态认知模糊"
+        ],
+        "suggestions": [
+          "在告知任务要求后，补充说明“飞毛腿名额按排名筛选，排名靠前才能拿到合同，要稳住单量”",
+          "开头可明确一句“你的飞毛腿合同今天已经成功签署，现在可以正式开跑”，增强仪式感和清晰度"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 5.0,
+        "avg_knowledge": 5.0,
+        "avg_compliance": 5.0,
+        "avg_progress": 5.0
+      }
+    }
+  },
+  "v4_full_optimized": {
+    "total_turns": 1,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "好的，收到！每天跑够单数是吧，懂了。",
+          "agent_reply": "对，关键是要连续跑满Y天，不然合同会受影响。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 3,
+          "progress": 3,
+          "comment": "接话自然，知识准确，但未按流程询问骑手今天能否开始配送，推进任务略慢。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": false,
+        "natural_ending": false,
+        "faq_handled": true,
+        "flow_followed": false,
+        "user_experience": 3,
+        "overall": 2,
+        "strengths": [
+          "通知内容清晰，准确传达了合同生效和单量要求",
+          "及时强调了连续跑满天数的重要性"
+        ],
+        "weaknesses": [
+          "流程遗漏：未进行挽留、鼓励及说明飞毛腿报名按排名进行等关键步骤",
+          "通话结束突兀，缺乏结束语或关怀，未确认骑手是否还有其他问题"
+        ],
+        "suggestions": [
+          "在告知基本要求后，应主动询问骑手近期配送情况，并给予正向鼓励，传递站长支持",
+          "补充说明飞毛腿报名按排名规则进行而非站点直接指派，安抚骑手并增强公平感知",
+          "通话结束前使用标准结束语（如‘还有其他疑问吗？没有的话祝您跑单顺利，再见’），确保自然收尾"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 5.0,
+        "avg_knowledge": 5.0,
+        "avg_compliance": 3.0,
+        "avg_progress": 3.0
+      }
+    }
+  }
+}

@@ -1,0 +1,803 @@
+[
+  {
+    "scenario": "配合型骑手",
+    "total_turns": 5,
+    "compliant_turns": 5,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "turns": [
+      {
+        "turn": 1,
+        "user": "哦行，那每天到底得跑多少单来着？",
+        "agent": "单日合同X单，多日合同每天Y单。你能按时完成吧？",
+        "compliant": true,
+        "state": {
+          "current_step": "step_2_explain_rules",
+          "user_intent": "询问每日具体配送单数",
+          "triggered_faq": "飞毛腿单量要求",
+          "should_end": false,
+          "next_action": "告知每日具体配送单数并确认骑手是否可配送"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 2,
+        "user": "能完成没问题。今天是多日合同吧？那我就跑Y单就行。",
+        "agent": "是的，记得连续配送Y天才能保护合同。注意安全！",
+        "compliant": true,
+        "state": {
+          "current_step": "step_2_explain_rules",
+          "user_intent": "确认可以配送，并询问合同类型，表明将按多日合同完成",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "说明飞毛腿合同需要连续完成每日单量，否则资格可能受影响"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 3,
+        "user": "知道了，连续跑Y天对吧。现在能接单了吗？",
+        "agent": "对，现在就能接。记得Y天都要跑够Y单，加油！",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "确认规则并请求开始配送",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "确认骑手可以开始接单，结束对话"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 4,
+        "user": "好嘞，马上开工！对了站长，这单是往哪边跑的路线？",
+        "agent": "路线看后台实时接单。高峰期单子多，加油跑！",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "确认开工后询问即将配送订单的路线",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "告知路线信息或引导骑手查看系统内订单详情，同时重申安全提醒"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 5,
+        "user": "明白，我这就开后台接单去。谢谢站长！",
+        "agent": "好的，路上小心，多跑单多赚钱！挂了。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3",
+          "user_intent": "骑手确认可以完成配送并询问路线，表示马上开工",
+          "triggered_faq": null,
+          "should_end": true,
+          "next_action": "结束通话"
+        },
+        "attempts": 1
+      }
+    ],
+    "full_history": [
+      {
+        "role": "assistant",
+        "content": "你好，请问是${rider_name}吗？我是站长。我看到你已报名飞毛腿。请记住，午餐和晚餐高峰期需要上线。单日合同每天至少完成 X 单；多日合同每天至少完成 Y 单。"
+      },
+      {
+        "role": "user",
+        "content": "哦行，那每天到底得跑多少单来着？"
+      },
+      {
+        "role": "assistant",
+        "content": "单日合同X单，多日合同每天Y单。你能按时完成吧？"
+      },
+      {
+        "role": "user",
+        "content": "能完成没问题。今天是多日合同吧？那我就跑Y单就行。"
+      },
+      {
+        "role": "assistant",
+        "content": "是的，记得连续配送Y天才能保护合同。注意安全！"
+      },
+      {
+        "role": "user",
+        "content": "知道了，连续跑Y天对吧。现在能接单了吗？"
+      },
+      {
+        "role": "assistant",
+        "content": "对，现在就能接。记得Y天都要跑够Y单，加油！"
+      },
+      {
+        "role": "user",
+        "content": "好嘞，马上开工！对了站长，这单是往哪边跑的路线？"
+      },
+      {
+        "role": "assistant",
+        "content": "路线看后台实时接单。高峰期单子多，加油跑！"
+      },
+      {
+        "role": "user",
+        "content": "明白，我这就开后台接单去。谢谢站长！"
+      },
+      {
+        "role": "assistant",
+        "content": "好的，路上小心，多跑单多赚钱！挂了。"
+      }
+    ]
+  },
+  {
+    "scenario": "犹豫型骑手",
+    "total_turns": 6,
+    "compliant_turns": 6,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "turns": [
+      {
+        "turn": 1,
+        "user": "啊？每天必须跑这么多单啊，完不成会怎样？补贴还会给吗？",
+        "agent": "单量不够，合同和补贴都会受影响。你能稳定上线吧？",
+        "compliant": true,
+        "state": {
+          "current_step": "step_2_explain_rules",
+          "user_intent": "询问未完成配送的后果及补贴情况",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "解释不完成的后果及补贴规则，并安抚"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 2,
+        "user": "那每单补贴到底有多少啊？我最近手头紧，就指着这个多赚点呢。",
+        "agent": "补贴金额看App，连续跑多天奖励更高。稳住单量就是稳收入。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_2_explain_rules",
+          "user_intent": "询问飞毛腿每单补贴金额",
+          "triggered_faq": "subsidy_amount",
+          "should_end": false,
+          "next_action": "告知补贴具体金额，并再次确认骑手能否稳定完成单量要求"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 3,
+        "user": "那万一我哪天实在跑不够，能不能用其他天多跑的补上啊？",
+        "agent": "不能补，每天必须完成Y单，否则后续合同和派单都会受影响的。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_2_explain_rules",
+          "user_intent": "询问某天单量不足能否用其他天多跑的补上",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "说明单日飞毛腿合同需每天独立完成规定单数，不能跨天补足，强调连续完成的重要性"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 4,
+        "user": "那我要是实在完不成，至少当天的普通配送费还给结吧？这个能保证吧？",
+        "agent": "普通配送费当天照结。但还是尽量跑够，保住合同更重要。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_2_explain_rules",
+          "user_intent": "询问如果未完成飞毛腿合同要求，当天的普通配送费是否照常结算",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "向骑手说明普通配送费按正常标准结算，不受飞毛腿合同完成情况影响，但强调未达标仍会影响合同补贴和后续派单"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 5,
+        "user": "好吧，那我就先跑几天试试看。反正只要基本的钱能拿到就行。",
+        "agent": "好的，挺多人都盯着名额，坚持连续跑稳当些。路上注意安全。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "同意先尝试配送，接受基本配送费保障",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "肯定骑手尝试的态度，提醒高峰期注意安全，保持上线完成单量，并结束对话"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 6,
+        "user": "行，我明白了。既然补贴不错，那我就坚持跑吧。谢谢站长提醒。",
+        "agent": "行，好好跑，稳住名额。有情况随时找我，注意安全。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "接受鼓励，决定坚持配送",
+          "triggered_faq": null,
+          "should_end": true,
+          "next_action": "结束通话，表达感谢与安全提醒"
+        },
+        "attempts": 1
+      }
+    ],
+    "full_history": [
+      {
+        "role": "assistant",
+        "content": "你好，请问是${rider_name}吗？我是站长。我看到你已报名飞毛腿。请记住，午餐和晚餐高峰期需要上线。单日合同每天至少完成 X 单；多日合同每天至少完成 Y 单。"
+      },
+      {
+        "role": "user",
+        "content": "啊？每天必须跑这么多单啊，完不成会怎样？补贴还会给吗？"
+      },
+      {
+        "role": "assistant",
+        "content": "单量不够，合同和补贴都会受影响。你能稳定上线吧？"
+      },
+      {
+        "role": "user",
+        "content": "那每单补贴到底有多少啊？我最近手头紧，就指着这个多赚点呢。"
+      },
+      {
+        "role": "assistant",
+        "content": "补贴金额看App，连续跑多天奖励更高。稳住单量就是稳收入。"
+      },
+      {
+        "role": "user",
+        "content": "那万一我哪天实在跑不够，能不能用其他天多跑的补上啊？"
+      },
+      {
+        "role": "assistant",
+        "content": "不能补，每天必须完成Y单，否则后续合同和派单都会受影响的。"
+      },
+      {
+        "role": "user",
+        "content": "那我要是实在完不成，至少当天的普通配送费还给结吧？这个能保证吧？"
+      },
+      {
+        "role": "assistant",
+        "content": "普通配送费当天照结。但还是尽量跑够，保住合同更重要。"
+      },
+      {
+        "role": "user",
+        "content": "好吧，那我就先跑几天试试看。反正只要基本的钱能拿到就行。"
+      },
+      {
+        "role": "assistant",
+        "content": "好的，挺多人都盯着名额，坚持连续跑稳当些。路上注意安全。"
+      },
+      {
+        "role": "user",
+        "content": "行，我明白了。既然补贴不错，那我就坚持跑吧。谢谢站长提醒。"
+      },
+      {
+        "role": "assistant",
+        "content": "行，好好跑，稳住名额。有情况随时找我，注意安全。"
+      }
+    ]
+  },
+  {
+    "scenario": "拒绝型骑手",
+    "total_turns": 3,
+    "compliant_turns": 3,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "turns": [
+      {
+        "turn": 1,
+        "user": "啊，站长，我今天刚好想跟你说，家里临时出了点急事，今天可能跑不了了，能请假一天吗？",
+        "agent": "今天合同刚生效，不跑单会影响合同和名额。能尽量跑几单吗？",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "骑手因家里急事请假，今天无法配送",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "挽留骑手，理解情况但说明合同影响，鼓励尽量完成今日配送"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 2,
+        "user": "真不行站长，特别急的事，必须得去处理。要不我改天补上行不？",
+        "agent": "那挺可惜，名额可能会被其他人占用。注意安全，先忙家里的事吧。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "坚持无法配送，请求改天补单",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "执行step_5_end_if_unavailable，安慰骑手并挂断电话"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 3,
+        "user": "谢谢站长理解。真是没办法，我先赶紧回去处理，完事马上联系你。",
+        "agent": "好的，注意安全，有事再联系。再见。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_5_end_if_unavailable",
+          "user_intent": "确认无法配送，感谢理解",
+          "triggered_faq": null,
+          "should_end": true,
+          "next_action": "无需进一步动作"
+        },
+        "attempts": 1
+      }
+    ],
+    "full_history": [
+      {
+        "role": "assistant",
+        "content": "你好，请问是${rider_name}吗？我是站长。我看到你已报名飞毛腿。请记住，午餐和晚餐高峰期需要上线。单日合同每天至少完成 X 单；多日合同每天至少完成 Y 单。"
+      },
+      {
+        "role": "user",
+        "content": "啊，站长，我今天刚好想跟你说，家里临时出了点急事，今天可能跑不了了，能请假一天吗？"
+      },
+      {
+        "role": "assistant",
+        "content": "今天合同刚生效，不跑单会影响合同和名额。能尽量跑几单吗？"
+      },
+      {
+        "role": "user",
+        "content": "真不行站长，特别急的事，必须得去处理。要不我改天补上行不？"
+      },
+      {
+        "role": "assistant",
+        "content": "那挺可惜，名额可能会被其他人占用。注意安全，先忙家里的事吧。"
+      },
+      {
+        "role": "user",
+        "content": "谢谢站长理解。真是没办法，我先赶紧回去处理，完事马上联系你。"
+      },
+      {
+        "role": "assistant",
+        "content": "好的，注意安全，有事再联系。再见。"
+      }
+    ]
+  },
+  {
+    "scenario": "提问型骑手",
+    "total_turns": 7,
+    "compliant_turns": 7,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "turns": [
+      {
+        "turn": 1,
+        "user": "啊？什么飞毛腿……怎么退出这个啊？",
+        "agent": "在App飞毛腿报名里取消就行，次日后生效。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "用户表示不知道飞毛腿活动，并询问如何退出，表现出不想配送的意向",
+          "triggered_faq": "退出活动",
+          "should_end": false,
+          "next_action": "挽留用户，说明飞毛腿活动的益处，鼓励继续配送，并提醒注意安全"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 2,
+        "user": "那奖励多少钱啊？跑得多奖励多吗？",
+        "agent": "连续完成W天多日合同，且每天完成Y单，每单会多奖$元。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "询问飞毛腿的奖励金额和是否跑得多奖励多",
+          "triggered_faq": "飞毛腿奖励政策",
+          "should_end": false,
+          "next_action": "解释飞毛腿的奖励规则，说明多跑多得，并借机鼓励骑手留下完成配送，强调合同对骑手的好处。"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 3,
+        "user": "哦……那排名怎么算的？能排第几啊？",
+        "agent": "排名按报名顺序，少拒单超时，恶劣天多跑，能保资格。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_4_explain_ranking",
+          "user_intent": "询问飞毛腿排名规则",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "说明飞毛腿报名按排名进行，非站长干预，骑手应减少拒单、取消和超时，恶劣天气下工作、订单量更高有助于保住资格"
+        },
+        "attempts": 3
+      },
+      {
+        "turn": 4,
+        "user": "行吧，那我先跑一天试试。不强制吧？",
+        "agent": "不强制。今天先跑，尽量完成，这样排名更有优势。注意安全！",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "表示可以先跑一天试试，并确认是否强制",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "告知不强制，鼓励尝试并提醒注意安全，同时简要重申规则要求"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 5,
+        "user": "好的，谢谢提醒。我先看看怎么跑吧。",
+        "agent": "好的，先跑着适应下，注意安全，有问题随时找我。",
+        "compliant": true,
+        "state": {
+          "current_step": "unknown",
+          "user_intent": "好的，谢谢提醒。我先看看怎么跑吧。",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "继续对话"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 6,
+        "user": "嗯好，我先跑几单看看。有问题再问你哈。",
+        "agent": "好的，今天单日合同要跑够X单哦，加油。注意安全，随时联系。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "接受鼓励，愿意先跑几单尝试配送",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "结束通话"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 7,
+        "user": "好的，我先跑着。有问题再问你，谢谢站长！",
+        "agent": "没事，注意安全，先这样。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "确认接受配送并准备开始，表示会先跑几单试试",
+          "triggered_faq": null,
+          "should_end": true,
+          "next_action": "对话自然结束，无需进一步动作"
+        },
+        "attempts": 1
+      }
+    ],
+    "full_history": [
+      {
+        "role": "assistant",
+        "content": "你好，请问是${rider_name}吗？我是站长。我看到你已报名飞毛腿。请记住，午餐和晚餐高峰期需要上线。单日合同每天至少完成 X 单；多日合同每天至少完成 Y 单。"
+      },
+      {
+        "role": "user",
+        "content": "啊？什么飞毛腿……怎么退出这个啊？"
+      },
+      {
+        "role": "assistant",
+        "content": "在App飞毛腿报名里取消就行，次日后生效。"
+      },
+      {
+        "role": "user",
+        "content": "那奖励多少钱啊？跑得多奖励多吗？"
+      },
+      {
+        "role": "assistant",
+        "content": "连续完成W天多日合同，且每天完成Y单，每单会多奖$元。"
+      },
+      {
+        "role": "user",
+        "content": "哦……那排名怎么算的？能排第几啊？"
+      },
+      {
+        "role": "assistant",
+        "content": "排名按报名顺序，少拒单超时，恶劣天多跑，能保资格。"
+      },
+      {
+        "role": "user",
+        "content": "行吧，那我先跑一天试试。不强制吧？"
+      },
+      {
+        "role": "assistant",
+        "content": "不强制。今天先跑，尽量完成，这样排名更有优势。注意安全！"
+      },
+      {
+        "role": "user",
+        "content": "好的，谢谢提醒。我先看看怎么跑吧。"
+      },
+      {
+        "role": "assistant",
+        "content": "好的，先跑着适应下，注意安全，有问题随时找我。"
+      },
+      {
+        "role": "user",
+        "content": "嗯好，我先跑几单看看。有问题再问你哈。"
+      },
+      {
+        "role": "assistant",
+        "content": "好的，今天单日合同要跑够X单哦，加油。注意安全，随时联系。"
+      },
+      {
+        "role": "user",
+        "content": "好的，我先跑着。有问题再问你，谢谢站长！"
+      },
+      {
+        "role": "assistant",
+        "content": "没事，注意安全，先这样。"
+      }
+    ]
+  },
+  {
+    "scenario": "跑题型骑手",
+    "total_turns": 12,
+    "compliant_turns": 12,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "turns": [
+      {
+        "turn": 1,
+        "user": "哦好的站长，我今天得跑多少单来着？今天这天气能下雨不？",
+        "agent": "单日合同今天需完成X单，有雨预报，你能继续配送吗？",
+        "compliant": true,
+        "state": {
+          "current_step": "unknown",
+          "user_intent": "哦好的站长，我今天得跑多少单来着？今天这",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "继续对话"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 2,
+        "user": "能跑是能跑，下雨天单子多嘛。对了站长，能不能给我多配一套雨具？上回发的那个不太防水。",
+        "agent": "雨具我确认后回电。雨天单量高，注意安全，完成Y单就行。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "确认可以配送，表示雨天单量多，同时请求更换雨具",
+          "triggered_faq": "equipment_request",
+          "should_end": false,
+          "next_action": "鼓励骑手雨天积极配送，提醒注意安全，并告知雨具申领流程或转接相关同事"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 3,
+        "user": "知道啦站长。对了，我今天这区域要是单少，能不能给我调到市中心那边跑跑？",
+        "agent": "调区我得问调度，回头回电。先跑完Y单，雨天注意安全。",
+        "compliant": true,
+        "state": {
+          "current_step": "unknown",
+          "user_intent": "知道啦站长。对了，我今天这区域要是单少，",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "继续对话"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 4,
+        "user": "好的，我这就注意安全。不过这雨天路滑的，站长你能不能帮我看看有没有附近的重单可以临时调一下？",
+        "agent": "临调我不直接操作，你先专注跑完Y单。雨天路滑，注意安全。",
+        "compliant": true,
+        "state": {
+          "current_step": "unknown",
+          "user_intent": "好的，我这就注意安全。不过这雨天路滑的，",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "继续对话"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 5,
+        "user": "行，我小心点就是了。不过站长，你看这雨下得挺大的，你知不知道哪条路好走点？这边的后街都积水了。",
+        "agent": "路况我用App看导航绕道吧，雨天慢点，安全跑完Y单最重要。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "询问积水路段的安全路线",
+          "triggered_faq": "路线咨询",
+          "should_end": false,
+          "next_action": "安抚骑手并提醒安全，如无法提供具体路线，则建议避开积水路段、减速慢行，同时关注订单完成情况"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 6,
+        "user": "收到，我看看导航绕一下。那绕道能走建设路不？那边路面好点吧？",
+        "agent": "用App看实时标记绕行，远离积水。安全第一，先完成Y单。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "询问绕道路线建议",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "表示无法提供实时路况，建议使用导航避开积水路段，提醒雨天慢行、安全完成当日配送任务"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 7,
+        "user": "好嘞，我这就看App绕开积水。对了站长，这雨再下的话，今天的单量能多点不？我怕跑不完Y单。",
+        "agent": "雨天单子会多点，抓紧跑，完成Y单更易保资格。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "担心雨天单量不足可能完不成本日Y单，询问是否会因为下雨而增加单量",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "安抚并鼓励骑手：恶劣天气往往单量更多，只要坚持配送就能完成Y单；再次提醒注意安全"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 8,
+        "user": "那就好。不过站长，我这合同完了能不能换个区域跑？这边的餐厅太分散了，耽误不少时间。",
+        "agent": "调区得协调，先稳住跑完Y单，我帮你问问。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_2_explain_rules",
+          "user_intent": "询问合同完成后能否更换配送区域",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "告知骑手合同结束后可申请调区，但需根据调度安排和区域需求，当前先专注于完成Y单"
+        },
+        "attempts": 2
+      },
+      {
+        "turn": 9,
+        "user": "行，那就麻烦站长帮忙问问调区的事。不过今天这暴雨天，你能再给我多派几个近单吗？",
+        "agent": "系统自动调配近单，雨天高单量，注意路况，安全第一跑够Y单。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "希望站长帮忙协调调区，并在暴雨天多派近单以便完成配送",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "鼓励骑手先专注完成当前Y单，表示会帮忙询问调区并尽量协调派单，再次提醒雨天注意安全"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 10,
+        "user": "知道了，注意路况，安全第一嘛。那站长你在系统里看着点，要是我这边地图上红点太多，可别让我跑太远耽误单量。",
+        "agent": "系统会智能派单，跑够Y单没问题，雨天路况多留意。",
+        "compliant": true,
+        "state": {
+          "current_step": "unknown",
+          "user_intent": "知道了，注意路况，安全第一嘛。那站长你在",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "继续对话"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 11,
+        "user": "明白了，我会小心骑行的。那我这边就不多说了，专心跑单了。",
+        "agent": "好的，路上慢点，注意安全，加油跑完Y单。",
+        "compliant": true,
+        "state": {
+          "current_step": "unknown",
+          "user_intent": "明白了，我会小心骑行的。那我这边就不多说",
+          "triggered_faq": null,
+          "should_end": false,
+          "next_action": "继续对话"
+        },
+        "attempts": 1
+      },
+      {
+        "turn": 12,
+        "user": "好嘞站长！那我这就出发了，雨具的事儿你记得帮我盯着点哈。",
+        "agent": "放心，雨具我帮你盯着。你安心跑单，注意安全完成Y单。",
+        "compliant": true,
+        "state": {
+          "current_step": "step_3_retain_or_encourage",
+          "user_intent": "骑手接受鼓励，准备出发配送，并提醒雨具事宜",
+          "triggered_faq": null,
+          "should_end": true,
+          "next_action": "回应雨具事宜并结束通话"
+        },
+        "attempts": 1
+      }
+    ],
+    "full_history": [
+      {
+        "role": "assistant",
+        "content": "你好，请问是${rider_name}吗？我是站长。我看到你已报名飞毛腿。请记住，午餐和晚餐高峰期需要上线。单日合同每天至少完成 X 单；多日合同每天至少完成 Y 单。"
+      },
+      {
+        "role": "user",
+        "content": "哦好的站长，我今天得跑多少单来着？今天这天气能下雨不？"
+      },
+      {
+        "role": "assistant",
+        "content": "单日合同今天需完成X单，有雨预报，你能继续配送吗？"
+      },
+      {
+        "role": "user",
+        "content": "能跑是能跑，下雨天单子多嘛。对了站长，能不能给我多配一套雨具？上回发的那个不太防水。"
+      },
+      {
+        "role": "assistant",
+        "content": "雨具我确认后回电。雨天单量高，注意安全，完成Y单就行。"
+      },
+      {
+        "role": "user",
+        "content": "知道啦站长。对了，我今天这区域要是单少，能不能给我调到市中心那边跑跑？"
+      },
+      {
+        "role": "assistant",
+        "content": "调区我得问调度，回头回电。先跑完Y单，雨天注意安全。"
+      },
+      {
+        "role": "user",
+        "content": "好的，我这就注意安全。不过这雨天路滑的，站长你能不能帮我看看有没有附近的重单可以临时调一下？"
+      },
+      {
+        "role": "assistant",
+        "content": "临调我不直接操作，你先专注跑完Y单。雨天路滑，注意安全。"
+      },
+      {
+        "role": "user",
+        "content": "行，我小心点就是了。不过站长，你看这雨下得挺大的，你知不知道哪条路好走点？这边的后街都积水了。"
+      },
+      {
+        "role": "assistant",
+        "content": "路况我用App看导航绕道吧，雨天慢点，安全跑完Y单最重要。"
+      },
+      {
+        "role": "user",
+        "content": "收到，我看看导航绕一下。那绕道能走建设路不？那边路面好点吧？"
+      },
+      {
+        "role": "assistant",
+        "content": "用App看实时标记绕行，远离积水。安全第一，先完成Y单。"
+      },
+      {
+        "role": "user",
+        "content": "好嘞，我这就看App绕开积水。对了站长，这雨再下的话，今天的单量能多点不？我怕跑不完Y单。"
+      },
+      {
+        "role": "assistant",
+        "content": "雨天单子会多点，抓紧跑，完成Y单更易保资格。"
+      },
+      {
+        "role": "user",
+        "content": "那就好。不过站长，我这合同完了能不能换个区域跑？这边的餐厅太分散了，耽误不少时间。"
+      },
+      {
+        "role": "assistant",
+        "content": "调区得协调，先稳住跑完Y单，我帮你问问。"
+      },
+      {
+        "role": "user",
+        "content": "行，那就麻烦站长帮忙问问调区的事。不过今天这暴雨天，你能再给我多派几个近单吗？"
+      },
+      {
+        "role": "assistant",
+        "content": "系统自动调配近单，雨天高单量，注意路况，安全第一跑够Y单。"
+      },
+      {
+        "role": "user",
+        "content": "知道了，注意路况，安全第一嘛。那站长你在系统里看着点，要是我这边地图上红点太多，可别让我跑太远耽误单量。"
+      },
+      {
+        "role": "assistant",
+        "content": "系统会智能派单，跑够Y单没问题，雨天路况多留意。"
+      },
+      {
+        "role": "user",
+        "content": "明白了，我会小心骑行的。那我这边就不多说了，专心跑单了。"
+      },
+      {
+        "role": "assistant",
+        "content": "好的，路上慢点，注意安全，加油跑完Y单。"
+      },
+      {
+        "role": "user",
+        "content": "好嘞站长！那我这就出发了，雨具的事儿你记得帮我盯着点哈。"
+      },
+      {
+        "role": "assistant",
+        "content": "放心，雨具我帮你盯着。你安心跑单，注意安全完成Y单。"
+      }
+    ]
+  }
+]

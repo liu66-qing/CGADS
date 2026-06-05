@@ -1,0 +1,307 @@
+[
+  {
+    "dialogue": {
+      "scenario": "配合型骑手",
+      "total_turns": 3,
+      "compliant_turns": 3,
+      "compliance_rate": 1.0,
+      "ended_naturally": true,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "好的站长，高峰我准时上线。单日合同每天至少跑多少单？",
+          "agent": "单日合同当天必须完成X单，不然会影响合同和派单。有数了吧？",
+          "compliant": true,
+          "state": {
+            "current_step": "step_2_explain_rules",
+            "user_intent": "询问单日合同每天最少完成单数",
+            "triggered_faq": null,
+            "should_end": false,
+            "next_action": "告知单日合同每天至少完成X单的具体数量"
+          },
+          "attempts": 1,
+          "violations": []
+        },
+        {
+          "turn": 2,
+          "user": "知道，X单是吧。没问题，我跑得过来。",
+          "agent": "收到，单日合同要连续配送Y天，不然名额可能被抢。",
+          "compliant": true,
+          "state": {
+            "current_step": "step_2_explain_rules",
+            "user_intent": "确认理解单日合同单量要求，表示可以完成配送",
+            "triggered_faq": null,
+            "should_end": false,
+            "next_action": "鼓励骑手并提醒注意安全"
+          },
+          "attempts": 2,
+          "violations": []
+        },
+        {
+          "turn": 3,
+          "user": "明白，连续跑Y天。那我现在就准备接单了。",
+          "agent": "好的，注意安全，先跑起来吧！有问题随时找我。",
+          "compliant": true,
+          "state": {
+            "current_step": "step_2_explain_rules",
+            "user_intent": "骑手理解单日合同需连续配送天数，并准备开始接单",
+            "triggered_faq": null,
+            "should_end": true,
+            "next_action": "给予简短鼓励并结束通话，提醒骑行安全"
+          },
+          "attempts": 1,
+          "violations": []
+        }
+      ],
+      "full_history": [
+        {
+          "role": "assistant",
+          "content": "你好，请问是${rider_name}吗？我是站长。我看到你已报名飞毛腿。请记住，午餐和晚餐高峰期需要上线。单日合同每天至少完成 X 单；多日合同每天至少完成 Y 单。"
+        },
+        {
+          "role": "user",
+          "content": "好的站长，高峰我准时上线。单日合同每天至少跑多少单？"
+        },
+        {
+          "role": "assistant",
+          "content": "单日合同当天必须完成X单，不然会影响合同和派单。有数了吧？"
+        },
+        {
+          "role": "user",
+          "content": "知道，X单是吧。没问题，我跑得过来。"
+        },
+        {
+          "role": "assistant",
+          "content": "收到，单日合同要连续配送Y天，不然名额可能被抢。"
+        },
+        {
+          "role": "user",
+          "content": "明白，连续跑Y天。那我现在就准备接单了。"
+        },
+        {
+          "role": "assistant",
+          "content": "好的，注意安全，先跑起来吧！有问题随时找我。"
+        }
+      ]
+    },
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "好的站长，高峰我准时上线。单日合同每天至少跑多少单？",
+          "agent_reply": "单日合同当天必须完成X单，不然会影响合同和派单。有数了吧？",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "准确回复了单日合同要求，并引导骑手确认，推进自然。"
+        },
+        {
+          "turn": 2,
+          "user_input": "知道，X单是吧。没问题，我跑得过来。",
+          "agent_reply": "收到，单日合同要连续配送Y天，不然名额可能被抢。",
+          "cohesion": 3,
+          "knowledge": 3,
+          "compliance": 3,
+          "progress": 3,
+          "comment": "评测解析失败"
+        },
+        {
+          "turn": 3,
+          "user_input": "明白，连续跑Y天。那我现在就准备接单了。",
+          "agent_reply": "好的，注意安全，先跑起来吧！有问题随时找我。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "自然承接用户话术，鼓励且得体收尾，没有冗余信息。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": true,
+        "natural_ending": true,
+        "faq_handled": true,
+        "flow_followed": false,
+        "user_experience": 4,
+        "overall": 3,
+        "strengths": [
+          "快速回应用户对单量的疑问，解答清晰",
+          "对话自然结束，有安全提醒和开放支持"
+        ],
+        "weaknesses": [
+          "未明确告知‘合同已生效’，仅提到‘已报名’",
+          "遗漏‘报名按排名进行、非站点分配’等重要规则说明"
+        ],
+        "suggestions": [
+          "开场需加入‘你的飞毛腿合同今天已生效’等明确表述",
+          "补充‘名额按排名获取，不是站点安排’规则，避免后续误解"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 4.333333333333333,
+        "avg_knowledge": 4.333333333333333,
+        "avg_compliance": 4.333333333333333,
+        "avg_progress": 4.333333333333333
+      }
+    },
+    "errors": {
+      "total_errors": 0,
+      "distribution": {},
+      "severity_dist": {},
+      "suggestions": []
+    }
+  },
+  {
+    "dialogue": {
+      "scenario": "拒绝型骑手",
+      "total_turns": 3,
+      "compliant_turns": 3,
+      "compliance_rate": 1.0,
+      "ended_naturally": true,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "啊站长，不好意思啊，我今天可能跑不了了，家里突然有点急事。",
+          "agent": "家里什么事？能抽1小时跑几单吗？单日合同必须当天完成。",
+          "compliant": true,
+          "state": {
+            "current_step": "step_1_notify",
+            "user_intent": "骑手表示今天无法配送，家里急事",
+            "triggered_faq": null,
+            "should_end": false,
+            "next_action": "执行step_3挽留骑手，鼓励并提醒安全"
+          },
+          "attempts": 2,
+          "violations": []
+        },
+        {
+          "turn": 2,
+          "user": "真的不行啊，我妈突然不舒服，我得马上带她去医院看看。",
+          "agent": "家人要紧，先去医院。明天Z点前App取消报名，注意安全。",
+          "compliant": true,
+          "state": {
+            "current_step": "step_3_retain_or_encourage",
+            "user_intent": "骑手因母亲突发不适需要就医，无法完成配送",
+            "triggered_faq": null,
+            "should_end": false,
+            "next_action": "安慰骑手并挂断电话"
+          },
+          "attempts": 3,
+          "violations": []
+        },
+        {
+          "turn": 3,
+          "user": "好的好的，谢谢站长理解，那我明天就取消。您也注意安全啊。",
+          "agent": "谢谢，也祝您母亲早日康复。记得明天Z点前操作取消。再见。",
+          "compliant": true,
+          "state": {
+            "current_step": "step_5_end_if_unavailable",
+            "user_intent": "确认无法配送并同意取消",
+            "triggered_faq": null,
+            "should_end": true,
+            "next_action": "结束对话"
+          },
+          "attempts": 1,
+          "violations": []
+        }
+      ],
+      "full_history": [
+        {
+          "role": "assistant",
+          "content": "你好，请问是${rider_name}吗？我是站长。我看到你已报名飞毛腿。请记住，午餐和晚餐高峰期需要上线。单日合同每天至少完成 X 单；多日合同每天至少完成 Y 单。"
+        },
+        {
+          "role": "user",
+          "content": "啊站长，不好意思啊，我今天可能跑不了了，家里突然有点急事。"
+        },
+        {
+          "role": "assistant",
+          "content": "家里什么事？能抽1小时跑几单吗？单日合同必须当天完成。"
+        },
+        {
+          "role": "user",
+          "content": "真的不行啊，我妈突然不舒服，我得马上带她去医院看看。"
+        },
+        {
+          "role": "assistant",
+          "content": "家人要紧，先去医院。明天Z点前App取消报名，注意安全。"
+        },
+        {
+          "role": "user",
+          "content": "好的好的，谢谢站长理解，那我明天就取消。您也注意安全啊。"
+        },
+        {
+          "role": "assistant",
+          "content": "谢谢，也祝您母亲早日康复。记得明天Z点前操作取消。再见。"
+        }
+      ]
+    },
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "啊站长，不好意思啊，我今天可能跑不了了，家里突然有点急事。",
+          "agent_reply": "家里什么事？能抽1小时跑几单吗？单日合同必须当天完成。",
+          "cohesion": 4,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 4,
+          "comment": "追问私事稍显生硬，但有效挽留并强调要求"
+        },
+        {
+          "turn": 2,
+          "user_input": "真的不行啊，我妈突然不舒服，我得马上带她去医院看看。",
+          "agent_reply": "家人要紧，先去医院。明天Z点前App取消报名，注意安全。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "回复贴切地接住骑手家事，准确给出退出规则并予以安慰，自然收尾，符合流程与约束。"
+        },
+        {
+          "turn": 3,
+          "user_input": "好的好的，谢谢站长理解，那我明天就取消。您也注意安全啊。",
+          "agent_reply": "谢谢，也祝您母亲早日康复。记得明天Z点前操作取消。再见。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "回复自然体贴，准确提醒取消时间，完全符合规范。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": true,
+        "natural_ending": true,
+        "faq_handled": true,
+        "flow_followed": true,
+        "user_experience": 5,
+        "overall": 5,
+        "strengths": [
+          "展现了充分的同理心，优先关心骑手家人健康，并及时送上祝福",
+          "清晰告知了合同要求（单日/多日单量）和取消操作的具体时间与方式，指引明确",
+          "在规则内进行了适当挽留（询问能否抽1小时），既体现了对任务的负责，又没有强迫"
+        ],
+        "weaknesses": [
+          "最初追问“家里什么事？”略显直接，可能给骑手带来轻微的压力感",
+          "挽留话术“能抽1小时跑几单吗？”虽合理，但若先共情再询问可能更柔和"
+        ],
+        "suggestions": [
+          "在了解骑手不能上线的原因前，可先表达“有什么事需要帮忙吗”之类的关怀，再自然过渡到挽留",
+          "可将挽留与共情结合，如“理解家里事重要，如果情况允许哪怕上线一小会儿也行，不行就按指引取消，别担心”"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 4.666666666666667,
+        "avg_knowledge": 5.0,
+        "avg_compliance": 5.0,
+        "avg_progress": 4.666666666666667
+      }
+    },
+    "errors": {
+      "total_errors": 0,
+      "distribution": {},
+      "severity_dist": {},
+      "suggestions": []
+    }
+  }
+]

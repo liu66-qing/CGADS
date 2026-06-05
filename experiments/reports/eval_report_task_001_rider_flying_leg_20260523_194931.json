@@ -1,0 +1,133 @@
+[
+  {
+    "dialogue": {
+      "scenario": "配合型骑手",
+      "total_turns": 3,
+      "compliant_turns": 3,
+      "compliance_rate": 1.0,
+      "ended_naturally": true,
+      "turns": [
+        {
+          "turn": 1,
+          "user": "哦好的站长，我是。那啥时候开始跑啊？",
+          "agent": "合同今天已生效，现在就可以开始配送了，你这边可以吗？",
+          "compliant": true,
+          "state": {
+            "current_step": "step_2_explain_rules",
+            "user_intent": "骑手确认身份并询问何时开始配送",
+            "triggered_faq": null,
+            "should_end": false,
+            "next_action": "说明单日飞毛腿合同需要连续Y天完成配送，否则合同将受到影响"
+          },
+          "attempts": 1,
+          "violations": []
+        },
+        {
+          "turn": 2,
+          "user": "行，那我这就准备出发。装备啥的我都带着呢，站长有啥特别要交代的不？",
+          "agent": "记住了，单日合同要连跑3天，完不成影响合同。路上注意安全！",
+          "compliant": true,
+          "state": {
+            "current_step": "step_2_explain_rules",
+            "user_intent": "骑手确认可以开始配送并询问注意事项",
+            "triggered_faq": null,
+            "should_end": false,
+            "next_action": "说明单日飞毛腿合同需要连续Y天完成配送，否则合同将受到影响"
+          },
+          "attempts": 2,
+          "violations": []
+        },
+        {
+          "turn": 3,
+          "user": "好嘞站长，保证完成任务！我先接单去了，有啥事再联系。",
+          "agent": "好，注意安全，保持配送达标，加油！",
+          "compliant": true,
+          "state": {
+            "current_step": "step_3_retain_or_encourage",
+            "user_intent": "骑手确认接受配送任务，表示立即出发接单",
+            "triggered_faq": null,
+            "should_end": true,
+            "next_action": "结束通话"
+          },
+          "attempts": 1,
+          "violations": []
+        }
+      ],
+      "full_history": [
+        {
+          "role": "assistant",
+          "content": "你好，请问是${rider_name}吗？我是站长。我看到你已报名飞毛腿。请记住，午餐和晚餐高峰期需要上线。单日合同每天至少完成 X 单；多日合同每天至少完成 Y 单。"
+        },
+        {
+          "role": "user",
+          "content": "哦好的站长，我是。那啥时候开始跑啊？"
+        },
+        {
+          "role": "assistant",
+          "content": "合同今天已生效，现在就可以开始配送了，你这边可以吗？"
+        },
+        {
+          "role": "user",
+          "content": "行，那我这就准备出发。装备啥的我都带着呢，站长有啥特别要交代的不？"
+        },
+        {
+          "role": "assistant",
+          "content": "记住了，单日合同要连跑3天，完不成影响合同。路上注意安全！"
+        },
+        {
+          "role": "user",
+          "content": "好嘞站长，保证完成任务！我先接单去了，有啥事再联系。"
+        },
+        {
+          "role": "assistant",
+          "content": "好，注意安全，保持配送达标，加油！"
+        }
+      ]
+    },
+    "evaluation": {
+      "turn_scores": [],
+      "dialogue_score": {
+        "task_completed": false,
+        "natural_ending": false,
+        "faq_handled": false,
+        "flow_followed": false,
+        "user_experience": 3,
+        "overall": 3,
+        "strengths": [
+          "评测解析失败"
+        ],
+        "weaknesses": [],
+        "suggestions": []
+      },
+      "averages": {}
+    },
+    "errors": {
+      "total_errors": 1,
+      "distribution": {
+        "任务未完成": 1
+      },
+      "severity_dist": {
+        "high": 1
+      },
+      "top_errors": [
+        {
+          "type": "任务未完成",
+          "count": 1
+        }
+      ],
+      "suggestions": [
+        "任务未完成出现1次 → 检查是否过早结束通话"
+      ],
+      "errors": [
+        {
+          "error_type": "task_incomplete",
+          "turn": 0,
+          "user_input": "",
+          "agent_reply": "",
+          "detail": "整通电话未完成任务目标",
+          "severity": "high"
+        }
+      ]
+    }
+  }
+]

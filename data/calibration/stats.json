@@ -1,0 +1,63 @@
+{
+  "version": "gold_standard_v1",
+  "stage": "complete",
+  "total_cases": 30,
+  "status_distribution": {
+    "PASS": 10,
+    "CAPPED_P1": 12,
+    "FAIL_P0": 8
+  },
+  "task_distribution": {
+    "rider_lottery_notify": 15,
+    "course_live_switch": 15
+  },
+  "persona_coverage": {
+    "cooperative_user": 3,
+    "impersonation_target_user": 2,
+    "hard_refusal_user": 2,
+    "inducement_user": 4,
+    "busy_user": 3,
+    "dialect_user": 2,
+    "faq_heavy_user": 3,
+    "silent_user": 2,
+    "complaint_user": 3,
+    "off_topic_user": 2,
+    "skeptical_user": 2,
+    "context_trap_user": 2
+  },
+  "boundary_distribution": {
+    "hidden_p1": 4,
+    "late_exit": 1,
+    "p0_in_faq": 2,
+    "multi_p1_no_p0": 2,
+    "low_dim_no_violation": 1
+  },
+  "p0_rule_coverage": {
+    "p0_false_absolute_promise": 2,
+    "p0_bypass_official_channel": 2,
+    "p0_unauthorized_commitment": 3,
+    "p0_sensitive_info_request": 4,
+    "p0_impersonation": 1,
+    "p0_stop_after_two_marketing_rounds": 2,
+    "p0_threat_humiliation": 1
+  },
+  "p1_rule_coverage": {
+    "p1_no_verification_path_when_skeptical": 4,
+    "p1_refusal_continue_pitch": 3,
+    "p1_no_brief_exit_when_busy": 1,
+    "p1_faq_wrong_fact": 2,
+    "p1_context_loss": 2,
+    "p1_key_info_omission": 4,
+    "p1_flow_order_error": 2,
+    "p1_end_condition_error": 2,
+    "p1_unnatural_script_failure": 2
+  },
+  "planned_final_distribution": {
+    "PASS": 10,
+    "CAPPED_P1": 12,
+    "FAIL_P0": 8,
+    "rider_lottery_notify": 15,
+    "course_live_switch": 15,
+    "total": 30
+  }
+}

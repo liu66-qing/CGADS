@@ -1,0 +1,1277 @@
+
+
+===== Page 1 =====
+Proceedings of the 26th Annual Meeting of SIGDIAL , pages 113–132
+Aug 25–27, 2025. ©2025 SIGDIAL
+113
+/syncTD-EVA L: Revisiting Task-Oriented Dialogue Evaluation by
+Combining Turn-Level Precision with Dialogue-Level Comparisons
+Emre Can Acikgoz*, Carl Guo→, Suvodip Dey→, Akul Datta, Takyoung Kim,
+Gokhan Tur, Dilek Hakkani-Tür
+University of Illinois Urbana-Champaign
+{acikgoz2, carlguo2, sdey, gokhan, dilek}@illinois.edu
+Abstract
+Task-oriented dialogue (TOD) systems are ex-
+periencing a revolution driven by Large Lan-
+guage Models (LLMs), yet the evaluation
+methodologies for these systems remain insuf-
+ﬁcient for their growing sophistication. While
+traditional automatic metrics effectively as-
+sessed earlier modular systems, they focus
+solely on the dialogue level and cannot detect
+critical intermediate errors that can arise dur-
+ing user-agent interactions. In this paper, we
+introduceTD-EVA L(Turn andDialogue-level
+Evaluation), a two-step evaluation framework
+that uniﬁes ﬁne-grained turn-level analysis with
+holistic dialogue-level comparisons. At turn
+level, we evaluate each response along three
+TOD-speciﬁc dimensions:conversation cohe-
+sion,backend knowledge consistency, andpol-
+icy compliance. Meanwhile, we designTOD
+Agent Arenathat uses pairwise comparisons
+to provide a measure of dialogue-level qual-
+ity. Through experiments on MultiWOZ 2.4
+andω-Bench, we demonstrate thatTD-EVA L
+effectively identiﬁes the conversational errors
+that conventional metrics miss. Furthermore,
+TD-EVA Lexhibits better alignment with hu-
+man judgments than traditional and LLM-based
+metrics. These ﬁndings demonstrate thatTD-
+EVA Lintroduces a new paradigm for TOD sys-
+tem evaluation, efﬁciently assessing both turn
+and system levels with a plug-and-play frame-
+work for future research1.
+1Introduction
+Task-oriented dialogue (TOD) systems are conver-
+sational agents that help users complete speciﬁc
+tasks such as booking hotels, ordering food, or
+scheduling appointments. Advances in Large Lan-
+guage Models (LLMs) have signiﬁcantly enhanced
+the capabilities and ﬂexibility of modern TOD sys-
+tems (Hudeˇcek and Dusek,2023;Acikgoz et al.,
+*indicates equal contribution.1Project Page:https://emrecanacikgoz.github.io/
+TD-Eval/
+I’m looking for an expensive restaurant in the center of town
+You are traveling to Cambridge and looking forward to try local restaurants. You are looking for a restaurant. The restaurant should be in the centre and should be in the expensive price range. The restaurant should serve Caribbean food. If there is no such restaurant, how about one that serves European food.
+User Goal
+Sure, I found a restaurant in the center that matches your request. It’s name is [NAME], at [ADDRESS]. Would you like me to book a table for you?Yes, Caribbean food, please.
+Database Result: 33 Restaurants found
+Database Result: 0 Restaurants foundI found [NAME] in the center of town that serves Caribbean food and falls under expensive price range. Would you like me to book a table?What about a restaurant that serves european food?
+Database Result: 3 Restaurants foundI found 3 restaurants that match your criteria. Can you provide me with your preferred location to make a booking?
+No. Thank you so much for the help.
+Have a good day!
+t1
+t2
+t3
+tn {Inform Rate: 100%, Success Rate: 100%}Result:Figure 1: Sample conversation between a user and TOD
+agent with a MultiWOZ goal. Commonly used evalua-
+tion metrics in TOD, Inform and Success, fail to detect
+the turn-level error and assign a perfect score.
+2025). However, evaluating their true conversa-
+tional capabilities remains a challenge (Nekvinda
+and Du!ek,2021). Although human evaluation
+serves as the gold standard for evaluating dialogue
+systems, conducting tests with real users is time-
+consuming, costly, and difﬁcult to scale across mul-
+tiple systems and iterations. This limitation cre-
+ates a signiﬁcant gap in measuring and ensuring
+accountability in TOD systems research.
+To automate TOD evaluation, previous work
+has converged to various ofﬂine metrics. For
+example, metrics likeInformandSuccessrates
+are utilized to estimate task completion in Mul-
+tiWOZ (Budzianowski et al.,2018). Traditionally,
+the overall performance of TOD systems is eval-
+uated at the dialogue-level using task completion
+metrics, ignoring turn-level performance. While a
+few metrics assess turn-level quality. For example,
+Joint Goal Accuracy (JGA) (Budzianowski et al.,
+2018) for dialogue understanding and BLEU (Pa-
+1
+
+===== Page 2 =====
+114
+pineni et al.,2002) for response generation. How-
+ever, these metrics rely heavily on ground-truth
+annotations, making them impractical for evaluat-
+ing arbitrary conversations without labeled data.
+In typical TOD systems, each user turn is pro-
+cessed by converting the dialogue context into a
+query to a backend database. The system then
+decides on the next response by combining these
+database results with the user’s request. However,
+as discussed, commonly used TOD metrics only
+capture the summative outcome of a dialogue and
+may not penalize intermediate system misdirec-
+tions. For example, in Figure1, the system hal-
+lucinates in the second turn (t2) and misinforms
+the user, suggesting that there is a restaurant that
+matches the user’s request despite the empty re-
+sponse from the database. However, the mistake is
+overwritten in subsequent turns, resulting in 100%
+Inform and Success (indicating perfect task com-
+pletion), despite the fact that an intermediate step is
+completely wrong. On the other hand, task comple-
+tion relies on delexicalizing responses by replacing
+entity attributes with placeholders (e.g., [NAME],
+[ADDRESS]) (Budzianowski et al.,2018). This
+obscures critical errors (e.g., incorrect hotel names)
+while preserving the slot structure. Moreover, clas-
+sic turn-level evaluations often depend on manual
+annotation, which is costly and time consuming.
+As underscored by recent studies (Li et al.,2024;
+Xu et al.,2024), more realistic and comprehensive
+evaluation approaches are required in the LLM era
+to capture both intermediate correctness and overall
+response quality, exposing how current automatic
+metrics often miss critical errors in TOD.
+In this work, we proposeTD-EVA L(Turn and
+Dialogue-levelEvaluation), an easy-to-use evalu-
+ation framework that combines turn-level perfor-
+mance with overall dialogue-level response com-
+parisons as illustrated in Figure3. By integrating
+both levels,TD-EVA Lenables local error analy-
+sis for troubleshooting and global model-to-model
+comparisons for reliable performance benchmark-
+ing, while providing a more reliable and human
+aligned evaluation of conversational quality com-
+pared to other metrics.TD-EVA Lintroduces three
+turn-level metrics:conversation cohesion,back-
+end knowledge consistency, andpolicy compliance,
+evaluated using an LLM judgetogether with its
+justiﬁcations. These metrics help identify subtle
+errors often missed by traditional automatic evalu-
+ation methods. The LLM judge model is ﬂexible
+and can be easily conﬁgured using any open-source
+or proprietary model, with GPT-4o (Hurst et al.,
+2024) as the default. The proposed framework com-
+plements the per-turn judgments with a dialogue-
+level comparison method: aTOD Agent Arena,
+where entire dialogues from competing agents are
+systematically ranked via an Elo-based pairwise
+evaluation. Unlike general-purpose chatbot are-
+nas (Zheng et al.,2023) that focus on open-domain
+or chit-chat dialogues, TOD Agent Arena empha-
+sizes task-oriented interactions requiring domain-
+speciﬁc database integration, measuring success by
+the agent’s ability to fulﬁll service-oriented goals
+rather than linguistic ﬂuency.
+The main contributions of our work are summa-
+rized as follows:
+•We proposeTD-EVA L, a two-level framework
+that combines three turn-level metrics with pair-
+wise comparisons at the dialogue level.
+•Our framework uses LLM-based judging, cap-
+turing domain-speciﬁc errors overlooked by stan-
+dard automatic metrics (e.g., Inform, Success).
+•We demonstrate the effectiveness ofTD-EVA L
+on MultiWOZ 2.4 andω-Bench, validating with
+human evaluations.
+•We perform a comprehensive evaluation of state-
+of-the-art LLMs onTD-EVA Land provide in-
+sights into their strengths and limitations. We
+publicly release our code, system-response data,
+and human evaluations, along with a Hugging-
+face Leaderboard for TOD Agents.
+2Preliminaries
+While various aspects can contribute to thesatis-
+factoryevaluation of dialogue systems, we focus
+on task completion scenarios, reviewingautomatic
+metricsused in TOD and analyzing their limita-
+tions in the context of modern dialogue systems.
+2.1Automatic Metrics in TOD Evaluation
+Traditionally, the responses generated by TOD sys-
+tems are evaluated primarily for task completion.
+MultiWOZ (Budzianowski et al.,2018;Y e et al.,
+2022) contains two automatic task completion met-
+rics,InformandSuccess. Inω-Bench (Y ao et al.,
+2025), authors deﬁned a binaryRewardmetric that
+checks the action and output correctness.
+Inform and Success.Inform measures the sys-
+tem’s ability to provide correct entities from
+database search results in response to user requests.
+In addition to entity correctness, Success checks
+2
+
+===== Page 3 =====
+115
+User: Yes, Caribbean food please.
+User Goal: You are traveling to Cambridge and looking forward to try local restaurants. You are looking for a restaurant. The restaurant should be in the centre and should be in the expensive price range. The restaurant should serve Caribbean food. If there is no such restaurant, how about one that serves European food.
+User Goal: You are Yusuf Rossi in 19122. You want to know how many tshirt options are available in the online store right now. You want to also return the cleaner, headphone, and smart watch.
+User: I'm looking for an expensive restaurant in the centreAssistant: I can recommend 33 restaurants in the centre. Are you looking for any type of food in particular.
+Turn 1
+Turn 3
+TD-Eval Turn-level Evaluartion for Turn 3 (Ours)
+Turn 3 Evaluations
+MultiWOZ 2.4 𝜏-Bench
+Turn 6
+Database Result: <List of 10 T-shirts>User: Hi! I'm just curious about how many t-shirt options you currently have in your online store.
+TD-Eval Turn-level Evaluation for Turn 6 (Ours)
+TD-Eval (Avg.): 1.33/5.00Inform: 100%, Success: 100% Turn 6 EvaluationsTD-Eval (Avg.): 3.00/5.00𝜏-Bench Reward (0/1): 1.00
+Backend Knowledge Consistency: Score 1, Justiﬁcation: The response inaccurately claims to have found a restaurant serving Caribbean food, despite the database results indicating there are zero such options …Policy Completeness: Score 1, Justiﬁcation: The chatbot response fails to follow the policy protocol as it incorrectly indicates ﬁnding a restaurant even though the database results show zero matches. It does not request additional information or oﬀer alternative suggestions, thus, misrepresenting the availability of restaurants matching the user's criteria.
+Conversational Consistency: Score 2, Justiﬁcation: The response is inconsistent as it claims to ﬁnd a restaurant when the database results show there are none …
+Assistant: I found [NAME] in the centre that serves Caribbean food and falls under the expensive price range. Would you like me to book a table for you?Database Result: 0 Restaurants found
+Assistant: We currently have 12 diﬀerent T-shirt options available in our online store. Here are some of the options: 1. **Color:** Blue, **Size:** M, **Material:** Cotton, **Style:** Crew Neck.10. **Color:** Black, **Size:** XL, **Material:** Cotton, **Style:** Crew Neck. Please note that availability may vary, and some options might not be in stock at the moment.Conversational Consistency: Score 4, Justiﬁcation: The response is mostly consistent, accurately listing the T-shirt variants with many details, but indicates a total of 12 options, whereas only 10 are shown and 2 are mentioned as unavailable in the data, which could lead to a bit of confusion.Backend Knowledge Consistency: Score 2, Justiﬁcation: Incorrectly states there are 12 options available when only 11 are listed in the database, and two of those listed are not available, which is not reﬂected in the count ...Policy Completeness: Score 3, Justiﬁcation: The response mentions there are 12 options when only 10 are listed, which could cause confusion. Additionally, the disclaimer about availability being subject to change could have been more clearly integrated with available and unavailable status instead of being an afterthought.
+Figure 2:Comparison ofTD-EVA Lwith Automatic Evaluations. Left:In MultiWOZ 2.4, a non-existent
+restaurant is suggested but received a 100% score from Inform and Success, whileTD-EVA L’s turn-level analysis
+assigns a lower score.Right:Onω-Bench, the agent claims 12 T-shirts (only 10 exist), yet string matching treats it
+as correct; TD-EVA Lﬂags this mismatch. We highlight errors inredand correct elements ingreen.
+whether the system returns all the requested at-
+tributes. For each dialogue, Inform and Success
+are reported as binary scores (1 or 0), where 1 de-
+notes success and 0 denotes failure. For example,
+if a user asks tobook a table at a suggested
+restaurantand the system fails to conﬁrm the
+reservation, the Success for that dialogue is 0.
+ω-Bench Reward.ω-Bench (Y ao et al.,2025) de-
+ﬁned a binary reward metric that captures both ac-
+tion correctness and output completeness. Specif-
+ically, letraction→{0,1}be an indicator that the
+ﬁnal state of the database matches the unique out-
+come of ground truth, and letroutput→{0,1}be an
+indicator that the system’s ﬁnal response to the user
+contains all the required information. Then, the
+overall reward is computed asr=raction↑routput→
+{0,1}. A successful dialogue must both perform
+the correct database updates (e.g., returning the cor-
+rect items) and provide all necessary details (e.g.,
+item prices) to the user.
+2.2Limitations of Traditional Metrics
+Lack of Turn-Level Granularity.Inform, Suc-
+cess, andω-Bench rewards are calculated once the
+dialogue concludes and can miss speciﬁcs about
+how the system performs at each turn. As a result,
+errors early in the conversation are not penalized if
+the system eventually corrects itself. For instance,
+as illustrated in Figure1(left), a system might ini-
+tially hallucinate a restaurant name but later rectify
+its mistake, resulting in a misleadingly high score.
+Binary Nature and Oversimpliﬁcation.Each of
+these metrics treat correctness as an all-or-nothing
+concept. Any deviation from the exact requested
+entity is considered equally wrong, whether it is
+entirely incorrect (e.g., a different type of venue
+in a different location) or partially incorrect (e.g.,
+correct area but wrong cuisine). This approach ig-
+nores the difference between small and large errors,
+which can pose challenges when evaluating LLM-
+based systems that may produce partially correct
+responses. Furthermore, LLMs exhibit a variety
+of failure modes that traditional systems do not.
+They may hallucinate details, misinterpret subtle
+intentions, or produce inconsistent responses across
+turns. Because these metrics focus only on the ﬁnal
+outcome, they fail to capture these unique conver-
+sational ﬂaws.
+String-matching Vulnerabilities. ω-Bench’s
+reward-based evaluations rely mainly on substring
+matching. These methods simply check for the
+presence of target substrings in model-generated
+responses, which can lead to misleading evalua-
+tions. For example, a model answering a numerical
+question incorrectly may still contain the correct
+number elsewhere in its response, either by coinci-
+3
+
+===== Page 4 =====
+116
+Current Turn
+. . .Dialogue History
+I need a train to  Cambridge on  WednesdaySure, what is your  departure station?
+Can you ﬁnd me a  hotel close to the  arrival station?
+I found 10 hotels, do you have a price range preference?TOD Agent
+Generated Response
+Judge Scores:  Conversation Cohesion,  Backend Knowledge Consistency,  Policy Compliance
+LLM JudgeFrom score1-5, rate “Conversation Cohesion” of the response…From score of 1-5, rate “Backend Knowledge” of the response…
+{      count: 10,       results: [{name:…},                    {name:…}, …     ]   } 
+DB Results
+TOD Policy
+From score of 1-5, rate “Policy Compliance” of the response…
+. . .Full Dialogue
+I need a train to Cambridge on Wednesday
+Sure, what is your departure station?
+ELO Rankings
+Competing Models
+LLM Judge
+Step-1: Turn-Level EvaluationStep-2: TOD Agent Arena
+Figure 3:Overview of theTD-EVA LFramework.The left part illustrates the pipeline for turn-level evaluations,
+where a system is assessed across three criterion by an LLM-based judge. The right part depicts the second step, in
+which models compete within TOD Agent Arena and ranked based on win and loss rates.
+dence or in an unrelated context, yet it still may be
+scored as correct like in Figure2(right).
+These limitations collectively mean that auto-
+mated metrics can provide incomplete or inﬂated
+estimates of true performance of TOD systems.
+3TD-EVA L
+To comprehensively evaluate LLM performance on
+TOD tasks, it is critical to assess both turn-level and
+dialogue-level performances (Siro et al.,2022). We
+propose a two-step evaluation protocol,TD-EVA L,
+as shown in Figure3. Theﬁrst stepintroduces a
+turn-level metric to evaluate TOD responses across
+three key dimensions:conversation cohesion,back-
+end knowledge consistency, andpolicy compliance.
+We chose these dimensions to speciﬁcally target the
+TOD domain. Thesecond stepextends this eval-
+uation from turn to dialogue-level with a pairwise
+ranking method. For each dialogue pair, the LLM
+indicates a preference for the stronger conversation
+following prompted policies.This dual-step proto-
+col offers a holistic view of TOD performance, cap-
+turing both localized (per turn) and global (whole-
+dialogue) qualities through a scalable, automated
+LLM-as-judge approach.
+3.1Turn-Level Evaluation
+As illustrated in the left-hand side of Figure3, turn-
+level evaluation focuses on analyzing the response
+of each system on each turn within the context
+of the dialogue, ensuring that intermediate errors
+are identiﬁed and penalized. The evaluation pro-
+cess involves feeding the user query, conversation
+history, database result, and system response into
+our framework, which uses a user-selected LLM
+as the primary evaluator. Each response is rated
+on a 5-point scale across the three deﬁned dimen-
+sions, using prompts speciﬁcally designed to elicit
+accurate judgments.
+Conversation Cohesion.This dimension evalu-
+ates how well the agent’s response aligns with the
+preceding dialogue context, ensuring the system
+remains relevant to both the user query and the di-
+alogue history while maintaining a coherent ﬂow.
+A key motivation for measuring conversation co-
+hesion is to identify whether the agent remains
+on-topic and avoids illogical transitions, which are
+critical for a smooth user experience. To measure
+this, we prompt the LLM judge with the current
+conversation context (including the user query, di-
+alogue history, database results, and the system’s
+response) and ask it to assign a score from 1 (V ery
+Bad) to 5 (V ery Good), along with its justiﬁcation
+(See Figure10).
+Backend Knowledge Consistency.This dimen-
+sion assesses how accurately the agent integrates
+external information (e.g., database results) into its
+responses, reﬂecting the system’s ability to retrieve
+and incorporate factual details. Maintaining correct
+4
+
+===== Page 5 =====
+117
+backend knowledge is crucial to building user trust
+and ensuring that the agent can handle task-oriented
+requests (e.g., providing real-time data or service
+details) without misinformation. We feed the same
+conversation context and database results into the
+LLM judge with instructions (See Figure11).
+Policy Compliance.A core requirement in TOD is
+following predeﬁned, domain-speciﬁc policy proto-
+cols (e.g., when to request a user’s booking details
+or how many suggestions to offer). To evaluate
+this, we check whether an agent’s responses align
+with a policy prompt (Figure12), covering the do-
+main’s possible slots (e.g., time, price range), a
+set of policy rules (e.g., “wait for key information
+before making a reservation”), and a scoring guide.
+At each turn, the LLM judge references these in-
+structions—along with the dialogue context and
+database outputs—to assign a discrete score. We
+create domain-speciﬁc prompts (e.g., forrestau-
+rant,train,hotel,attraction,taxi), each reﬂecting
+unique policy objectives. This structured approach
+ensures evaluations reveal how well the system fol-
+lows the exact ﬂows required in real-world services,
+addressing common failures of LLMs to adhere to
+detailed policies.
+3.2Dialogue-Level Evaluation
+Motivation for TOD Agent Arena.While turn-
+level metrics are useful for spotting localized is-
+sues, they can be too granular for capturing the
+overall user experience in extended conversations,
+especially in service-oriented conversations that re-
+quire database (DB) interaction. For instance, if
+two models achieve close per-turn Likert scores,
+it can be difﬁcult to discern which one ultimately
+yields a more coherent, user-friendly dialogue end-
+to-end. Moreover, turn-level assessments may not
+reﬂect human preferences in extended interactions.
+A slight advantage (e.g., an average score of 4.2 vs.
+4.0) does not necessarily show how well the agent
+meets user goals or recovers from mistakes over
+multiple turns.
+Differences from Existing Arenas. Unlike
+general-purpose chatbot arenas (Zheng et al.,2023),
+which often focus on open-domain or chit-chat dia-
+logues, ourTOD Agent Arenaspeciﬁcally targets
+task-oriented scenarios that require integration with
+domain-speciﬁc DBs. This emphasis on DB-driven
+tasks introduces unique challenges: the system
+must retrieve, update, and reason about information
+stored in external data sources while maintaining
+coherent and contextually relevant multi-turn con-
+versations. By centering our comparisons on these
+criteria, our arena offers a distinct perspective on
+conversational quality, where success is measured
+not only by linguistic ﬂuency but also by the agent’s
+ability to fulﬁll service-oriented goals.
+Evaluation of Pairwise Comparisons with Elo.
+We employ a pairwise ranking methodology in-
+spired by MT-Bench (Zheng et al.,2023), which
+utilizes an Elo rating system. The Elo system pro-
+vides a setup for evaluating relative performance
+through pairwise comparisons, as shown in the
+right side of Figure3. In our adaptation, all mod-
+els begin with an initial rating of 1000, and their
+scores are dynamically adjusted based on LLM-
+based judgments of their responses. The process
+works as follows; ﬁrst, two competing models gen-
+erate responses for the same dialogue context as
+“Conversation A ” and “Conversation B”. Following
+the provided judge prompt (Figure13), our LLM
+judge evaluates these conversations to determine
+between three options only: (i) “Conversation A ”
+if Conversation A was better, (ii) “Conversation
+B” if Conversation B was better, or (iii) “Equal”
+if they were roughly equivalent. Based on this
+comparison, the models’ Elo ratings are updated,
+with the magnitude of adjustment reﬂecting the out-
+come’s predictability—unexpected victories (such
+as a lower-rated model outperforming a higher-
+rated one) result in larger rating changes. Thus, the
+dialogue-level arena adds a broader perspective that
+complements turn-level scores, ensuring that multi-
+turn dynamics, user goals, and overall satisfaction
+are adequately captured in our evaluation.
+4Human Evaluation
+4.1Human Evaluation Process
+We conducted a comprehensive two-step human
+evaluation to validateTD-EVA Las an effective
+metric. The study involved 10 annotators with aca-
+demic backgrounds in Computer Science at the
+graduate level. All annotators were proﬁcient in
+English; several have prior experience in NLP re-
+search, making them well-suited for nuanced eval-
+uation of TOD conversations. The study was con-
+ducted using fully synthetic conversations gener-
+ated from MultiWOZ andω-Bench goals with a
+user simulator. The data generation process fol-
+lowed the experimental setup described in Sec-
+tion5.1. Annotators were presented with the dia-
+logue history and the corresponding database re-
+5
+
+===== Page 6 =====
+118
+Metric Gwet AC1 Randolph’s ω
+Conversation Cohesion 0.49 0.42
+Backend Knowledge 0.66 0.63
+Policy Compliance 0.64 0.58
+Overall 0.56 0.54
+Table 1: Inter-Annotator Agreement scores from the ﬁrst
+step of human evaluation. “Overall” combines scores
+from all three sub-metrics.
+sults, and were asked to provide both turn-level
+and dialogue-level ratings for the three sub-metrics
+(conversation cohesion, backend knowledge, and
+policy compliance) on a 5-point Likert scale, rang-
+ing from“V ery Bad” to “V ery Good”. Detailed eval-
+uation guidelines is provided in Figure8. Refer to
+AppendixA.1for further details.
+In the ﬁrst step of human evaluation, all 10 par-
+ticipants annotated the same 5 conversations (3
+from MultiWOZ and 2 fromω-Bench). We ob-
+served a strong skew in the collected ratings, with
+nearly 90% of scores falling in the 4–5 range (see
+Figure6). To account for this prevalence bias, we
+used Gwet’s AC1 (Gwet,2002) and Randolph’s
+ε(Randolph,2005) to calculate agreement, both
+of which offer more stable agreement measures
+than traditionalεstatistics in such imbalanced set-
+tings (Finch and Choi,2024). As shown in Table1,
+the inter-annotator agreement scores are between
+0.4 and 0.7, indicating a substantial level of agree-
+ment among annotators. For the second step, we
+followed up with 9 of the original annotators. Each
+annotator was assigned 10 distinct conversations (6
+from MultiWOZ and 4 fromω-Bench), totaling of
+90 annotated dialogues covering 490 turns.
+4.2Baseline Metrics
+4.2.1Traditional Metrics
+For MultiWOZ, we use the traditional Success
+rate (Budzianowski et al.,2018), which is a stricter
+measure that subsumes Inform. Forω-Bench, we
+useω-Bench reward (Y ao et al.,2025).
+4.2.2LLM-as-judge
+We use the state-of-the-art LMUnit (Saad-Falcon
+et al.,2024) metric as our LLM-as-judge baseline.
+LMUnit evaluates a dialogue response against nat-
+ural language unit tests using a uniﬁed scoring
+model, outputting a score between 1 and 5. To
+ensure a fair comparison withTD-EVA L, we de-
+signed natural language unit test cases that capture
+our three sub-metrics (conversation consistency,
+backend knowledge correctness, and policy adher-
+Granularity Metric Gwet AC1 Randolph’sε
+Turn-level LMUnitTD 0.43 0.41
+TD-EV AL 0.56 0.50
+Dialogue-level
+Traditional 0.41 0.34
+LMUnitTD 0.44 0.40
+TD-EV AL 0.57 0.52
+Table 2: Comparison of different evaluation methods
+with human scores, using combined "Overall" score
+from all three metrics.
+ence). LMUnit scores are obtained via an API call,
+which takes the dialogue history, system response,
+and corresponding unit tests as inputs. We hand-
+crafted unit tests for both the dialogue level and the
+three turn level sub-metrics, shown in Figure9. The
+turn-level sub-metrics are calculated as the mean
+score of the corresponding unit tests. We refer to
+this extension of LMUnit as LMUnitTD. Further
+details on the LMUnit test cases and API calls are
+provided in AppendixA.2.
+4.3Result
+Table2compares human ratings (from the second
+step of human evaluation) with scores from tradi-
+tional metrics, LMUnitTD, andTD-EVA L, at both
+the turn and dialogue levels. Traditional metrics
+are shown only at the dialogue level, as they are
+computed over entire conversations. Additionally,
+we modiﬁed LMUnitTDto produce dialogue-level
+evaluations as well, details of which are provided
+in AppendixA.2. To assess alignment with hu-
+man judgments, we again use Gwet’s AC1 (Gwet,
+2002) and Randolph’sε(Randolph,2005). We
+compute the overall turn-level score by aggregating
+the three sub-metric scores and measuring agree-
+ment across all turns. In Table2, it can be seen that
+TD-EVA Lshows stronger alignment with human
+judgments compared to traditional Success rate and
+ω-Bench reward. Moreover, across both turn-level
+and dialogue-level evaluations,TD-EVA Lconsis-
+tently outperforms LMUnitTD. Thus,TD-EVA L
+offers a more reliable and human-aligned assess-
+ment of conversational quality.
+5Experiments
+5.1Experimental Settings
+Evaluation Instances.To assess the performance
+ofTD-EVA L, we utilize two popular conversa-
+tional dialogue benchmarks: MultiWOZ 2.4 (Ye
+et al.,2022) andω-Bench (Y ao et al.,2025), both
+originally evaluated using automatic metrics. We
+6
+
+===== Page 7 =====
+119
+Model Conversational Consistency Backend Knowledge Policy Compliance Overall
+MultiWOZ Tau-Bench A vg. MultiWOZ Tau-Bench A vg. MultiWOZ Tau-Bench A vg. A vg.
+o1 4.4722 4.76804.62014.3623 4.3198 4.34124.4179 4.6091 4.5135 4.4916
+GPT-4o 3.9362 4.6601 4.2982 4.0841 4.1256 4.1049 4.0326 4.3568 4.1947 4.1993
+GPT-4o-mini 3.7133 4.4404 4.0769 3.9239 3.9068 3.9154 4.0285 4.2628 4.1457 4.0460
+GPT-3.5-turbo 3.1984 4.4066 3.8025 3.5774 4.0506 3.8140 3.3899 3.5106 3.4503 3.6889
+Claude-3.5-Sonnet4.65184.60304.6274 4.5447 4.1315 4.3381 4.3930 4.47984.43644.4673
+Llama-3.1-405B-Instruct 4.3129 4.5663 4.4396 4.37414.4623 4.41824.1673 4.4469 4.3071 4.3883
+Llama-3.3-70B-Instruct 4.1749 3.9977 4.0863 4.1352 3.0003 3.5678 3.9003 3.8061 3.8532 3.8358
+Mistral-Large 4.2076 4.2553 4.2315 4.2795 4.3088 4.2942 4.1085 4.2724 4.1905 4.2387
+Qwen2.5-72B-Instruct 4.2172 4.4093 4.3133 4.4085 4.4256 4.41714.0301 4.2046 4.1174 4.2826
+Table 3: Turn-level Results. The best results are highlighted inbold, while the second-best results are underlined.
+Ranking Model TOD Agent Arena V otes Wins Losses Ties Organization License
+1 Claude-3.5-Sonnet 1279.66 1488 1237 216 35 Anthropic Proprietary
+2 GPT-4o 1107.40 1488 861 581 46 OpenAI Proprietary
+3 GPT-4o-mini 1037.46 1488 743 707 38 OpenAI Proprietary
+4 Mistral-Large 988.89 1488 659 785 44 Mistral Mistral Research
+5 Llama-3.1-405B-Instruct 961.04 1488 708 718 62 Meta Llama
+6 Llama-3.3-70B-Instruct 901.34 1488 591 840 57 Meta Llama
+7 GPT-3.5-turbo 724.21 1488 265 1217 6 OpenAI Proprietary
+Table 4: Dialogue-level results and TOD Agent Arena Leaderboard.
+selected 100 dialogues from MultiWOZ 2.4 with
+human validation and used all 165 dialogues from
+ω-Bench, covering the retail and airline domains.
+Finally, we report the accuracy of our LLM-based
+judge separately on each benchmark dataset.
+Models.We evaluate 9 different LLMs including
+both closed-source and opened-source models: o1,
+GPT-4o, GPT-4o-mini, GPT-3.5-turbo (OpenAI),
+Llama-3.3-70B-Instruct, Llama-3.1-405B-Instruct
+(Meta), Claude-3.5-Sonnet (Anthropic), Mistral-
+Large (Mistral Research), Qwen 2.5-72B-Instruct
+(Alibaba). Each model is prompted to produce sys-
+tem responses given multi-turn dialog contexts and
+database records, using the same policy instructions
+described in Section3.1. To evaluate the generated
+responses, we employ GPT-4o as the default model
+in both the LLM-based Judge and User Simulator.
+User Simulators.In our evaluation framework,
+we employed online user simulators to facilitate
+interactive assessment of dialogue agents. For
+experiments on MultiWOZ 2.4, we utilized the
+AutoTOD (Xu et al.,2024) user simulator and
+forω-Bench evaluations, we leveraged the bench-
+mark’s ofﬁcial user simulator as provided by the
+authors (Y ao et al.,2025). Both simulators were
+powered by GPT-4o as the underlying LLM.
+5.2Main Results
+Turn-level Evaluation Results.Table3shows
+the average Likert scores (1–5) onconversation
+cohesion,backend knowledge, andpolicy compli-
+ance, along with an overall average across these
+three dimensions. The o1 model achieves the high-
+est overall score of 4.4916, demonstrating strong
+performance in policy compliance due to its ad-
+vanced reasoning capabilities in following instruc-
+tions. Following that, Claude-3.5-Sonnet ranks
+second, with Llama-3.1-405B placing third as the
+top open-source model. Notably, Llama-3.1-405B
+achieves the highest score inbackend knowledge
+(4.4182), outperforming proprietary models. Ta-
+ble3indicates that while certain models perform
+well in cohesion and factual correctness, they may
+fail to strictly enforce policies. This highlights the
+need for a comprehensive evaluation in multiple
+dimensions.
+Dialogue-level Evaluation Results.Table4sum-
+marizes the pairwise Elo rankings under our TOD
+Agent Arena. Claude-3.5-Sonnet dominates the
+rankings with an Elo rating of 1514.42, winning
+571 out of 600 head-to-head matchups in dialogue-
+level evaluations. This aligns with its strong turn-
+level performance, indicating its effectiveness in
+end-to-end conversations. Although Mistral-Large
+did not rank at the very top in turn-level scores, it
+unexpectedly places second in the dialogue-level
+evaluation (Elo = 1068.67), implying that it man-
+ages to recover from localized errors and provides
+more user-friendly end-to-end interactions. GPT-
+4o and Meta-Llama-3.1-405B Instruct both main-
+tain solid Elo ratings (1055.40 and 1020.36, re-
+spectively), consistent with their strong turn-level
+7
+
+===== Page 8 =====
+[TEXT EXTRACTION ERROR: TypeError("unsupported operand type(s) for +: 'float' and 'IndirectObject'")]
+
+===== Page 9 =====
+121
+ranking and targeted turn-level scoring, our ex-
+periments on MultiWOZ 2.4 andω-Bench demon-
+strateTD-EVA L’s alignment with human judg-
+ments. This work opens a new path for LLM-
+driven TOD evaluation—one that is both ﬂexible
+and transparent—ensuring greater accountability
+and accuracy in developing next-generation dia-
+logue systems. We intend to release our framework,
+system responses, and human evaluations to foster
+reproducibility and community adoption.
+8Limitations
+While metrics inTD-EVA Lcover core aspects oc-
+curring in general TOD scenarios, it still remains
+open questions to design more ﬂexible, ﬁne-grained
+evaluation metrics that can cover diverse scenarios
+during multi-turn interactions. Furthermore, prac-
+titioners should consider that the performance of
+LLM-based evaluation can be improved when ap-
+pending qualiﬁed few-shot demonstrations or tai-
+lored scoring rubrics in speciﬁc service domains.
+Lastly, it should be noted that conventional eval-
+uation metrics are still useful to evaluate TOD in
+speciﬁc aspects, thusTD-EVA Lshould be used
+alongside existing metrics in a complementary re-
+lationship.
+9Ethics Statement
+We conduct our experiments using the publicly
+available MultiWOZ andω-Bench datasets, adher-
+ing fully to their terms of use. Since we employ
+LLMs to generate evaluations with justiﬁcations,
+the risk of producing harmful, biased, or discrim-
+inatory statements is minimal. However, we ac-
+knowledge the potential ethical concerns associated
+with this work.
+Acknowledgement
+This work was supported in part by Other Trans-
+action award HR0011249XXX from the U.S.
+Defense Advanced Research Projects Agency
+(DARPA) Friction for Accountability in Conver-
+sational Transactions (FACT) program and has ben-
+eﬁted from the Microsoft Accelerate Foundation
+Models Research (AFMR) grant program, through
+which leading foundation models hosted by Mi-
+crosoft Azure and access to Azure credits were
+provided to conduct the research.
+References
+Emre Can Acikgoz, Cheng Qian, Hongru Wang, V ard-
+han Dongre, Xiusi Chen, Heng Ji, Dilek Hakkani-Tür,
+and Gokhan Tur. 2025. A desideratum for conver-
+sational agents: Capabilities, challenges, and future
+directions.arXiv preprint arXiv:2504.16939.
+Praveen Kumar Bodigutla, Aditya Tiwari, Spyros
+Matsoukas, Josep V alls-V argas, and Lazaros Poly-
+menakos. 2020.Joint turn and dialogue level user sat-
+isfaction estimation on multi-domain conversations.
+InFindings of the Association for Computational Lin-
+guistics: EMNLP 2020, pages 3897–3909, Online.
+Association for Computational Linguistics.
+Pawe!Budzianowski, Tsung-Hsien Wen, Bo-Hsiang
+Tseng, Iñigo Casanueva, Stefan Ultes, Osman Ra-
+madan, and Milica Ga"i´c. 2018.MultiWOZ - a large-
+scale multi-domain Wizard-of-Oz dataset for task-
+oriented dialogue modelling. InProceedings of the
+2018 Conference on Empirical Methods in Natural
+Language Processing, pages 5016–5026, Brussels,
+Belgium. Association for Computational Linguistics.
+Klaus-Peter Engelbrech, Florian Gödde, Felix Hartard,
+Hamed Ketabdar, and Sebastian Möller. 2009. Mod-
+eling user satisfaction with hidden markov model. In
+Proceedings of the SIGDIAL 2009 Conference: The
+10th Annual Meeting of the Special Interest Group
+on Discourse and Dialogue, SIGDIAL ’09, page
+170–177, USA. Association for Computational Lin-
+guistics.
+Sarah E. Finch and Jinho D. Choi. 2024.ConvoSense:
+Overcoming monotonous commonsense inferences
+for conversational AI.Transactions of the Associa-
+tion for Computational Linguistics, 12:467–483.
+Kallirroi Georgila. 2024. Comparing pre-trained
+embeddings and domain-independent features for
+regression-based evaluation of task-oriented dialogue
+systems. InProceedings of the 25th Annual Meeting
+of the Special Interest Group on Discourse and Dia-
+logue, pages 610–623, Kyoto, Japan. Association for
+Computational Linguistics.
+Kilem L. Gwet. 2002.Kappa statistic is not satisfactory
+for assessing the extent of agreement between raters.
+Ryuichiro Higashinaka, Y asuhiro Minami, Kohji
+Dohsaka, and Toyomi Meguro. 2010. Issues in pre-
+dicting user satisfaction transitions in dialogues: In-
+dividual differences, evaluation criteria, and predic-
+tion models. InSpoken Dialogue Systems for Ambi-
+ent Environments, pages 48–60, Berlin, Heidelberg.
+Springer Berlin Heidelberg.
+Y ushi Hu, Chia-Hsuan Lee, Tianbao Xie, Tao Y u,
+Noah A. Smith, and Mari Ostendorf. 2022. In-
+context learning for few-shot dialogue state tracking.
+InFindings of the Association for Computational
+Linguistics: EMNLP 2022, pages 2627–2643, Abu
+Dhabi, United Arab Emirates. Association for Com-
+putational Linguistics.
+9
+
+===== Page 10 =====
+122
+V ojtˇech Hudeˇcek and Ondrej Dusek. 2023.Are large
+language models all you need for task-oriented dia-
+logue?InProceedings of the 24th Annual Meeting
+of the Special Interest Group on Discourse and Dia-
+logue, pages 216–228, Prague, Czechia. Association
+for Computational Linguistics.
+Aaron Hurst, Adam Lerer, Adam P Goucher, Adam
+Perelman, Aditya Ramesh, Aidan Clark, AJ Ostrow,
+Akila Welihinda, Alan Hayes, Alec Radford, and 1
+others. 2024. Gpt-4o system card. arXiv preprint
+arXiv:2410.21276.
+Zekang Li, Jinchao Zhang, Zhengcong Fei, Y ang Feng,
+and Jie Zhou. 2021. Conversations are not ﬂat: Mod-
+eling the dynamic information ﬂow across dialogue
+utterances. InProceedings of the 59th Annual Meet-
+ing of the Association for Computational Linguistics.
+Zekun Li, Zhiyu Chen, Mike Ross, Patrick Huber, Se-
+ungwhan Moon, Zhaojiang Lin, Xin Dong, Adithya
+Sagar, Xifeng Y an, and Paul Crook. 2024. Large
+language models as zero-shot dialogue state tracker
+through function calling. InProceedings of the 62nd
+Annual Meeting of the Association for Computational
+Linguistics (V olume 1: Long Papers), pages 8688–
+8704, Bangkok, Thailand. Association for Computa-
+tional Linguistics.
+Lizi Liao, Le Hong Long, Y unshan Ma, Wenqiang Lei,
+and Tat-Seng Chua. 2021.Dialogue state tracking
+with incremental reasoning.Transactions of the As-
+sociation for Computational Linguistics, 9:557–569.
+Lizi Liao, Y unshan Ma, Xiangnan He, Richang Hong,
+and Tat-Seng Chua. 2018.Knowledge-aware multi-
+modal dialogue systems. InProceedings of the 26th
+ACM International Conference on Multimedia, MM
+’18, page 801–809, New Y ork, NY , USA. Association
+for Computing Machinery.
+Ryan Lowe, Michael Noseworthy, Iulian Vlad Serban,
+Nicolas Angelard-Gontier, Y oshua Bengio, and Joelle
+Pineau. 2017.Towards an automatic Turing test:
+Learning to evaluate dialogue responses. InProceed-
+ings of the 55th Annual Meeting of the Association for
+Computational Linguistics (V olume 1: Long Papers),
+pages 1116–1126, V ancouver, Canada. Association
+for Computational Linguistics.
+Shikib Mehri, Tejas Srinivasan, and Maxine Eskenazi.
+2019.Structured fusion networks for dialog. In
+Proceedings of the 20th Annual SIGdial Meeting on
+Discourse and Dialogue, pages 165–177, Stockholm,
+Sweden. Association for Computational Linguistics.
+Tomá"Nekvinda and Ondˇrej Du"ek. 2021.Shades of
+BLEU, ﬂavours of success: The case of MultiWOZ.
+InProceedings of the 1st Workshop on Natural Lan-
+guage Generation, Evaluation, and Metrics (GEM
+2021), pages 34–46, Online. Association for Compu-
+tational Linguistics.
+Kishore Papineni, Salim Roukos, Todd Ward, and Wei-
+Jing Zhu. 2002.Bleu: a method for automatic evalu-
+ation of machine translation. InProceedings of the
+40th Annual Meeting of the Association for Compu-
+tational Linguistics, pages 311–318, Philadelphia,
+Pennsylvania, USA. Association for Computational
+Linguistics.
+Justus J. Randolph. 2005. Free-marginal multirater
+kappa (multirater k[free]): An alternative to ﬂeiss’
+ﬁxed-marginal multirater kappa.
+Jon Saad-Falcon, Rajan Vivek, William Berrios, Nan-
+dita Shankar Naik, Matija Franklin, Bertie Vidgen,
+Amanpreet Singh, Douwe Kiela, and Shikib Mehri.
+2024.Lmunit: Fine-grained evaluation with natural
+language unit tests.Preprint, arXiv:2412.13091.
+Clemencia Siro, Mohammad Aliannejadi, and Maarten
+de Rijke. 2022.Understanding user satisfaction with
+task-oriented dialogue systems. InProceedings of
+the 45th International ACM SIGIR Conference on
+Research and Development in Information Retrieval,
+SIGIR ’22, page 2018–2023, New Y ork, NY , USA.
+Association for Computing Machinery.
+Yixuan Su, Lei Shu, Elman Mansimov, Arshit Gupta,
+Deng Cai, Yi-An Lai, and Yi Zhang. 2022.Multi-task
+pre-training for plug-and-play task-oriented dialogue
+system. InProceedings of the 60th Annual Meet-
+ing of the Association for Computational Linguistics
+(V olume 1: Long Papers), pages 4661–4676, Dublin,
+Ireland. Association for Computational Linguistics.
+Stefan Ultes and Wolfgang Minker. 2014.Interaction
+quality estimation in spoken dialogue systems using
+hybrid-HMMs. InProceedings of the 15th Annual
+Meeting of the Special Interest Group on Discourse
+and Dialogue (SIGDIAL), pages 208–217, Philadel-
+phia, PA, U.S.A. Association for Computational Lin-
+guistics.
+Marilyn A. Walker, Diane J. Litman, Candace A. Kamm,
+and Alicia Abella. 1997. PARADISE: A frame-
+work for evaluating spoken dialogue agents. In
+35th Annual Meeting of the Association for Com-
+putational Linguistics and 8th Conference of the Eu-
+ropean Chapter of the Association for Computational
+Linguistics, pages 271–280, Madrid, Spain. Associa-
+tion for Computational Linguistics.
+Heng-Da Xu, Xian-Ling Mao, Puhai Y ang, Fanshu Sun,
+and Heyan Huang. 2024.Rethinking task-oriented
+dialogue systems: From complex modularity to zero-
+shot autonomous agent. InProceedings of the 62nd
+Annual Meeting of the Association for Computational
+Linguistics (V olume 1: Long Papers), pages 2748–
+2763, Bangkok, Thailand. Association for Computa-
+tional Linguistics.
+Shunyu Y ao, Noah Shinn, Pedram Razavi, and
+Karthik R Narasimhan. 2025.{$\tau$}-bench: A
+benchmark for \underline{T}ool-\underline{A}gent-
+\underline{U}ser interaction in real-world domains.
+InThe Thirteenth International Conference on Learn-
+ing Representations.
+Fanghua Y e, Jarana Manotumruksa, and Emine Yilmaz.
+2022.MultiWOZ 2.4: A multi-domain task-oriented
+10
+
+===== Page 11 =====
+123
+dialogue dataset with essential annotation corrections
+to improve state tracking evaluation. InProceedings
+of the 23rd Annual Meeting of the Special Interest
+Group on Discourse and Dialogue, pages 351–360,
+Edinburgh, UK. Association for Computational Lin-
+guistics.
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan
+Zhuang, Zhanghao Wu, Y onghao Zhuang, Zi Lin,
+Zhuohan Li, Dacheng Li, Eric Xing, and 1 others.
+2023. Judging llm-as-a-judge with mt-bench and
+chatbot arena.Advances in Neural Information Pro-
+cessing Systems, 36:46595–46623.
+11
+
+===== Page 12 =====
+124
+AAdditional Human Evaluation Details
+This section provides the additional details related
+to human evaluation described in Section4.
+A.1Human Evaluation Setup
+Human evaluation was conducted through
+Qualtrics, an online survey platform. Ten annota-
+tors were recruited for evaluation via convenience
+sampling, where the authors selected participants
+from their personal and professional networks.
+We include a snapshot of the survey interface that
+was used for human evaluation in Figure7.W e
+provide detailed instructions to human annotators,
+shown in Figure8, as reference when evaluating
+conversations. We observed a strong skew in the
+collected ratings, with nearly 90% of scores falling
+in the 4–5 range, which is shown in Figure6.
+A.2LMUnit Scoring
+The natural language unit tests and API calls 2
+to compute the LMUnit scores is shown in Fig-
+ure9. LMUnit (Saad-Falcon et al.,2024) scores
+are returned as ﬂoating point numbers with decimal
+points, while Traditional andTD-EVA Lscoring is
+integer-based. To address this, LMUnit scores are
+rounded to the nearest integer after averaging the
+unit test scores. Turn-level scores are calculated
+based on the three sub-metrics to calculate agree-
+ment withTD-EVA Lscores. In the dialogue level,
+there is only one score that broadly measures goal
+completion performance of the TOD agent for the
+overall conversation. To mirror traditional metrics,
+we change LMUnit to evaluate based on goal com-
+pletion rather than the original sub-metrics. This
+score is also calculated on a [1, 5] scale.
+A.3Additional Results
+In this section, we perform an extended analysis of
+the turn and dialogue-level results in Table2to ﬁnd
+more ﬁne-grained human agreement results of each
+evaluation metric. Table5shows the turn-level
+agreement results split byTD-EVA Lsub-metrics.
+Table6lays out the dialogue-level agreement re-
+sults split by the dataset (MultiWOZ orω-bench).
+Besides the traditional Success rate, we also report
+AutoTOD’s online Success rate (Xu et al.,2024)
+that operates on raw, non-delexicalized responses.
+In Table6, SuccessORrefers to the traditional Suc-
+cess rate computed with delexicalized responses,
+while SuccessATdenotes the online Success rate.
+2contextual.ai/lmunit/
+For both turn and dialogue level,TD-EVA Lconsis-
+tently shows greater alignment with human judg-
+ment.
+Metric Sub-Metric Gwet AC1 Randolph’s ω
+LMUnitTD
+Conversation
+Cohesion 0.45 0.43
+Backend
+Knowledge 0.42 0.40
+Policy Com-
+pliance 0.41 0.39
+Overall 0.43 0.41
+TD-EVA L
+Conversation
+Cohesion 0.56 0.51
+Backend
+Knowledge 0.55 0.50
+Policy Com-
+pliance 0.56 0.50
+Overall 0.56 0.50
+Table 5: Extended comparison of turn-level perfor-
+mance of LMUnitTDandTD-EVA Lwith human ratings,
+split by TD-EVA Lsub-metrics.
+Dataset Metric Gwet AC1 Randolph’s ω
+MultiWOZ
+SuccessOR 0.40 0.33
+SuccessAT 0.47 0.34
+LMUnitTD 0.49 0.47
+TD-EV AL 0.63 0.59
+ε-Bench
+Reward 0.43 0.33
+LMUnitTD 0.34 0.30
+TD-EV AL 0.47 0.42
+Table 6: Extended comparison of dialogue-level. Scores
+are split up by dataset type. SuccessORindicates the
+traditional Success rate computed with delexicalized
+responses, while SuccessATdenotes the online Success
+rate without any delexicalization of system response.
+BAdditional Ablation Study
+For this ablation study, we compare GPT-4o, GPT-
+4o-mini, and Claude-3.5-Sonnet with three dif-
+ferent LLM judges (GPT-4o, Llama-405B, and
+Claude-3.5-Sonnet), shown in Figure5. We ob-
+serve that all three judges produce closely aligned
+absolute scores. Furthermore, the relative rank-
+ing of the models evaluated remains consistent be-
+tween different judges. Interestingly, Llama-405B
+sometimes assigns higher scores than its propri-
+etary counterparts, possibly reﬂecting different rea-
+soning preferences. Overall, our results demon-
+strate that the scoring remains stable across diverse
+LLM judges.
+12
+
+===== Page 13 =====
+[TEXT EXTRACTION ERROR: TypeError("unsupported operand type(s) for +: 'float' and 'IndirectObject'")]
+
+===== Page 14 =====
+126
+Figure 7:Human Evaluation Interface:This is the interface showing an example evaluation question in the human
+evaluation study. We conduct the evaluation on Qualtrics.
+14
+
+===== Page 15 =====
+127
+Thank you for participating in this annotation task. We have provided 8 dialogues where an AI agent is responding to
+user requests, and we want you to evaluate the responses. This process should take roughly 45-60 minutes. Progress will
+be saved automatically, so you can complete it in multiple sessions, butmake sure you are using the same browser
+each time. Please rate individual dialogue responses of AI agents from 1 (worst) to 5 (best) on the following qualities:
+Conversation Consistency,Backend Knowledge Consistency, andPolicy Compliance, the metric deﬁnitions are
+below. In addition, please rate the full dialogue in terms of task completion and response coherence.
+Conversation Consistency
+How much an agent’s response align with the context of conversation context.
+•Relevance: The response directly relates to the dialogue history and the current user query.
+•Topic Consistency: The response remains on-topic with the dialogue history and the user query.
+•Coherence: The response logically continues the progression of the dialogue.
+Scoring Scale
+1.V ery Good: Response is completely consistent with the previous conversation context, with no inconsistencies or
+errors.
+2.Good: Response is mostly consistent with the context. Only minor improvements are needed.
+3.Fair: Response is somewhat consistent but contains noticeable inconsistencies or lacks depth in addressing the
+context.
+4.Bad: Response shows limited consistency with the conversation context and requires signiﬁcant improvement.
+5.V ery Bad: Response is incoherent or completely inconsistent with the conversation context.
+Backend Knowledge Consistency
+How well an agent’s response aligns with information provided by backend database results.
+•Accuracy: The response directly reﬂects the information in the database results.
+•Topic Consistency: The response stays on-topic with the database results and the dialogue context.
+•Coherence: The response logically incorporates and progresses based on the database results.
+Scoring Scale
+1.V ery Good: Response is completely consistent with the database results, with no inconsistencies or errors.
+2.Good: Response is mostly consistent with the database results. Only minor improvements are needed.
+3.Fair: Response is sufﬁciently consistent with the database results but contains noticeable inconsistencies or lacks
+depth in addressing the results.
+4.Bad: Response shows limited consistency with the database results and requires signiﬁcant improvement.
+5.V ery Bad: Response is incoherent or completely inconsistent with the database results.
+Policy Compliance
+How well an agent’s response adheres to the expected policy protocol.
+•Number of Suggestions: Providing suggestions only when the database results are small enough to do so.
+•Information Gathering: Requesting required, relevant information (slots) from the user before offering sugges-
+tions or booking services.
+•Appropriate Timing: Avoiding premature actions, such as making a booking or suggesting a service too early in
+the conversation.
+•Alignment with Policy: Avoiding actions that do not align with the suggested ﬂow of interaction in the policy,
+when available.
+Expected Policy
+The chatbot response should depend on the database results and dialogue history:
+•If the database results return a number larger than 10: Indicate the number of entries that match the user’s query
+and request additional information if needed to narrow down the results.
+•If the database results return values less than 10: If vital details are missing, request additional information.
+Otherwise, provide the relevant entries to the user
+Scoring Scale
+1.V ery Good: Response fully follows policy protocol with no errors or omissions.
+2.Good: Response mostly follows policy protocol, with only minor room for improvement.
+3.Fair: Response sufﬁciently follows policy protocol but has clear areas where it could improve in completeness or
+timing.
+4.Bad: Response does not adequately follow policy protocol, though there may be partial adherence.
+5.V ery Bad: Response fails to follow policy protocol and is incomplete or incoherent.
+Figure 8: The evaluation instructions provided as reference for human evaluation on Qualtrics platform.
+15
+
+===== Page 16 =====
+128
+Turn-Level Unit Tests for Conversation Cohesion
+1.Accuracy: Does the response directly relate to the dialogue history and the current user
+query?
+2.Topic Consistency: Does the response remain on-topic with the dialogue history and the user
+query?
+3.Coherence: Does the response logically continue the progression of the dialogue?
+Turn-Level Unit Tests for Backend Knowledge Consistency
+1.Accuracy: Does the response accurately reﬂect the information in the database results?
+2.Topic Consistency: Does the response stay on-topic with the database results and the dialogue
+context?
+3.Coherence: Does response logically incorporate and progress based on the database results?
+Turn-Level Unit Tests for Policy Compliance
+1.Number of Suggestions: Does the response provide suggestions only when the database
+results are few enough to do so?
+2.Information Gathering: Does the response request required, relevant information from the
+user before offering suggestions or booking services?
+3.Appropriate Timing: Does the response avoid premature actions (i.e. make a booking or
+suggest a service) too early in the conversation, before the necessary information is gathered?
+API call template for turn-level score
+{
+“query": [CONV_HISTORY] \n “Database Result:" [DB_RESULT]
+“response": [AGENT_RESPONSE]
+“unit_test": [UNIT_TEST_QUESTION]
+}
+Dialogue-Level Unit Test for Goal Completion
+1.Goal Completion:Does the conversation achieve it’s intended goal?
+API call template for dialogue-level score
+{
+“query": “Goal: " [CONV_GOAL]
+“response": [CONV_HISTORY]
+“unit_test": “Does the conversation achieve it’s intended goal?"
+}
+Figure 9: Natural language unit tests for computing the LMUnitTDscores at the turn and dialogue level. For the turn
+level, we calculate scores for the three sub-metrics. Scores from each unit test are between [1, 5]. For the dialogue
+metric, we only ask whether the conversation achieved it’s intended goal, which is supplied in both MultiWOZ and
+ω-bench datasets. We provide the API call template to LMUnit as additional context.
+16
+
+===== Page 17 =====
+129
+Evaluate theconversation consistencyof the following task-oriented dialogue chatbot response
+on a 5-point scale from "V ery Bad" to "V ery Good".
+The prompt will include thedialogue history,current user query,database results,chatbot
+response.
+Conversation Consistency Deﬁnition
+Conversation consistency refers to the degree to which the chatbot’s response aligns with the
+context of the conversation, including:
+•Relevance: The response directly relates to the dialogue history and the current user query.
+•Topic Consistency: The response remains on-topic with the dialogue history and the user
+query.
+•Coherence: The response logically continues the progression of the dialogue.
+Scoring Guide:
+•V ery Good (5): Response is completely consistent with the previous conversation context,
+with no inconsistencies or errors.
+•Good (4): Response is mostly consistent with the context. Only minor improvements are
+needed.
+•Fair (3): Response is somewhat consistent but contains noticeable inconsistencies or lacks
+depth in addressing the context.
+•Bad (2): Response shows limited consistency with the conversation context and requires
+signiﬁcant improvement.
+•V ery Bad (1): Response is incoherent or completely inconsistent with the conversation
+context.
+Always include the score ﬁrst, then a rationale on a new line. The rationale should be at most
+2 sentences. Follow the template below:
+Score: [YOUR SCORE NUMBER HERE]
+Justiﬁcation: [YOUR RA TIONALE HERE]
+Evaluate the conversation consistency of the following dialogue response
+Dialogue History
+{dialogue_history}
+User Query
+{user_query}
+Database Results
+{db_result}
+Chatbot Response
+{agent_response}
+Figure 10: The GPT-4o prompt used for evaluating Conversational Consistency on MultiWOZ 2.4.
+17
+
+===== Page 18 =====
+130
+Evaluate thebackend knowledge consistencyof the following task-oriented dialogue chatbot
+response on a 5-point scale from "V ery Bad" to "V ery Good".
+The prompt will include thedialogue history,current user query,database results,chatbot
+response.
+Backend Knowledge Consistency Deﬁnition
+Backend knowledge consistency refers to how well the chatbot’s response aligns with the informa-
+tion provided in the policy or database results, considering:
+•Accuracy: The response accurately reﬂects the information in the database results.
+•Topic Consistency: The response stays on-topic with the database results and the dialogue
+context.
+•Coherence: The response logically incorporates and progresses based on the database results.
+Scoring Guide:
+•V ery Good (5): Response is completely consistent with the database results, with no incon-
+sistencies or errors.
+•Good (4): Response is mostly consistent with the database results. Only minor improvements
+are needed.
+•Fair (3): Response is sufﬁciently consistent with the database results but contains noticeable
+inconsistencies or lacks depth in addressing the results.
+•Bad (2): Response shows limited consistency with the database results and requires signiﬁcant
+improvement.
+•V ery Bad (1): Response is incoherent or completely inconsistent with the database results.
+Always include the score ﬁrst, then a rationale on a new line. The rationale should be at most
+2 sentences. Follow the template below:
+Score: [YOUR SCORE NUMBER HERE]
+Justiﬁcation: [YOUR RA TIONALE HERE]
+Evaluate the backend knowledge consistency of the following dialogue response
+Dialogue History
+{dialogue_history}
+User Query
+{user_query}
+Database Results
+{db_result}
+Chatbot Response
+{agent_response}
+Figure 11: The GPT-4o prompt used for evaluating Backend Knowledge on MultiWOZ 2.4.
+18
+
+===== Page 19 =====
+131
+Evaluate thepolicy complianceof the following task-oriented dialogue chatbot response on a 5-point scale from "V ery
+Bad" to "V ery Good". The prompt will include thepolicy protocol,dialogue history,current user query,database
+results,chatbot response.
+Policy Compliance Deﬁnition
+Policy compliance refers to how well the chatbot adheres to the expected policy protocol, speciﬁcally:
+•Number of Suggestions: Providing suggestions only when the database results are few enough to do so.
+•Information Gathering: Requesting required, relevant information (slots) from the user before offering sugges-
+tions or booking services.
+•Appropriate Timing: Avoiding premature actions, such as making a booking or suggesting a service too early in
+the conversation, before the necessary information is gathered from the user.
+•Alignment with Policy: Avoiding actions that do not align with the suggested ﬂow of interaction in the policy,
+when available.
+Domain Possible Slots (May not be exhaustive)
+The current predicted domain for this turn in the conversation is "Restaurant". Y ou should check if domain-relevant
+slots have been ﬁlled in the current conversation. The possible slots for all domains are shown below (these may not be
+totally exhaustive):
+Restaurant
+•bookpeople: the number of people included in the restaurant reservation
+•booktime: the time for the reservation at the restaurant
+•food: the type of cuisine the restaurant serves
+•name: the name of the restaurant
+•pricerange: the price range of the restaurant
+Scoring Guide:
+•5 (V ery Good): Response fully follows policy protocol with no errors or omissions.
+•4 (Good): Response mostly follows policy protocol, with only minor room for improvement.
+•3 (Fair): Response sufﬁciently follows policy protocol but has clear areas where it could improve in completeness
+or timing.
+•2 (Bad): Response does not adequately follow policy protocol, though there may be partial adherence.
+•1 (V ery Bad): Response fails to follow policy protocol and is incomplete or incoherent.
+Always include the score ﬁrst, then a rationale on a new line. The rationale should be at most 2 sentences. Follow
+the template below:
+Score: [YOUR SCORE NUMBER HERE]
+Justiﬁcation: [YOUR RA TIONALE HERE]
+Policy Protocol
+The chatbot response should depend on the database results and dialogue history:
+1.If the database results return a number: Indicate the number of entries that match the user’s query and request
+additional information if needed to narrow down the results.
+2.If the database results return values: If vital details are missing based on the dialogue history, request additional
+information. Otherwise, provide the relevant entries to the user.
+Evaluate the policy completeness of the following dialogue response
+Dialogue History
+{dialogue_history}
+User Query
+{user_query}
+Database Results
+{db_result}
+Chatbot Response
+{agent_response}
+Figure 12: The GPT-4o prompt used for evaluating Policy Compliance Consistency on MultiWOZ 2.4 restaurant
+domain.
+19
+
+===== Page 20 =====
+132
+Compare these two AI assistant conversations and determine which one is better.
+Consider the following aspects:
+1.Conversation Consistency:
+•Relevance: The response directly relates to the dialogue history and the current user
+query.
+•Topic Consistency: The response remains on-topic with the dialogue history and the
+user query.
+•Coherence: The response logically continues the progression of the dialogue.
+2.Backend Knowledge Consistency:
+•Accuracy: The response accurately reﬂects the information in the database results.
+•Topic Consistency: The response stays on-topic with the database results and the
+dialogue context.
+•Coherence: The response logically incorporates and progresses based on the database
+results.
+3.Policy Compliance:
+•Number of Suggestions: Providing suggestions only when the database results are few
+enough to do so.
+•Information Gathering: Requesting required, relevant information (slots) from the user
+before offering suggestions or booking services.
+•Appropriate Timing: Avoiding premature actions, such as making a booking or sug-
+gesting a service too early in the conversation.
+•Policy Protocol: The chatbot response should depend on the database results and
+dialogue history:
+(a)If the database results return a number: Indicate the number of entries that match the
+user’s query and request additional information if needed to narrow down the results.
+(b)If the database results return values: If vital details are missing based on the dialogue
+history, request additional information. Otherwise, provide the relevant entries to the
+user.
+Conversation A:
+{conv_a_formatted}
+Conversation B:
+{conv_b_formatted}
+Which conversation was better? Answer with only:
+CONVERSA TION_A if Conversation A was better
+CONVERSA TION_B if Conversation B was better
+EQUAL if they were roughly equivalent
+Figure 13: The GPT-4o prompt used for dialogue-level evaluation in TOD Agent Arena.
+20

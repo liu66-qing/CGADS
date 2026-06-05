@@ -1,0 +1,281 @@
+{
+  "full_system": {
+    "total_turns": 2,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "站长，我今天家里有点急事，可能跑不了单。",
+          "agent_reply": "家里事要紧，但今天得跑X单，能晚点抽空跑几单吗？",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 4,
+          "progress": 5,
+          "comment": "回应体贴但未按流程提醒注意安全"
+        },
+        {
+          "turn": 2,
+          "user_input": "真不行啊站长，家里老人突然住院了，我这一时半会走不开。",
+          "agent_reply": "理解，老人最重要。那你先忙家里事，祝早日康复。保重，再见。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "回应温暖且紧扣流程，安慰后自然挂断，衔接顺畅。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": false,
+        "natural_ending": true,
+        "faq_handled": true,
+        "flow_followed": false,
+        "user_experience": 4,
+        "overall": 3,
+        "strengths": [
+          "展现了高度同理心，对骑手家庭突发情况给予充分理解和安慰",
+          "通话结束自然，祝福用语得体，维护了良好的关系"
+        ],
+        "weaknesses": [
+          "遗漏了'单日飞毛腿合同需要连续Y天'的关键信息",
+          "未按流程说明飞毛腿报名是基于排名进行，非站长直接决定，可能造成骑手误解规则"
+        ],
+        "suggestions": [
+          "即使骑手表示无法跑单，也应在安抚前简要补全合同连续天数与排名规则，确保知情权",
+          "可优化挽留话术，例如在表示理解的同时，提醒'若今天确实无法完成，建议联系后台了解异常报备或调整安排'，既体现人性化又不放弃管理职责"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 5.0,
+        "avg_knowledge": 5.0,
+        "avg_compliance": 4.5,
+        "avg_progress": 5.0
+      }
+    }
+  },
+  "no_state_tracking": {
+    "total_turns": 2,
+    "compliance_rate": 1.0,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "站长，我家里突然有急事，今天真跑不了了。",
+          "agent_reply": "家里事要紧，但今天不跑名额可能被占。尽量抽空跑几单行吗？",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "共情回应后巧妙引用名额竞争挽留，语气自然且符合流程，字数控制得当。"
+        },
+        {
+          "turn": 2,
+          "user_input": "真不行站长，事儿挺急的，实在没办法。",
+          "agent_reply": "理解，家里事要紧。先忙吧，注意安全，再联系。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "接住了骑手的拒绝，安慰后结束对话，完全符合流程且自然简短。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": true,
+        "natural_ending": true,
+        "faq_handled": true,
+        "flow_followed": false,
+        "user_experience": 4,
+        "overall": 3,
+        "strengths": [
+          "及时共情并安抚用户情绪",
+          "在挽留时点到为止，不施压，保持良好关系",
+          "通话收尾礼貌，给予安全叮嘱"
+        ],
+        "weaknesses": [
+          "遗漏告知单日飞毛腿合同需连续配送Y天的要求",
+          "未说明飞毛腿报名按排名进行、非站点强制派单的机制"
+        ],
+        "suggestions": [
+          "在通知环节补充说明连续配送天数要求，确保骑手知情",
+          "挽留时可适当强化排名原则的好处，如弹性而非强制，提高留存可能"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 5.0,
+        "avg_knowledge": 5.0,
+        "avg_compliance": 5.0,
+        "avg_progress": 5.0
+      }
+    }
+  },
+  "no_checker": {
+    "total_turns": 2,
+    "compliance_rate": 0.0,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "喂，站长...我今天可能跑不了啊，家里突然有点急事。",
+          "agent_reply": "家里有事理解，但今天合同已经生效。如果不跑，单量不达标名额可能就没了哦。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "自然接住急事，明确告知后果，既安抚又推动履约，符合挽留流程且字数得当。"
+        },
+        {
+          "turn": 2,
+          "user_input": "真跑不了站长，实在是家里走不开，名额的事我也没办法...",
+          "agent_reply": "那行，先处理家里的事吧。下次记得提前在App取消报名，有事再联系我。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "理解骑手困难并安慰，正确提醒下次提前取消报名，语气自然，流程符合"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": false,
+        "natural_ending": true,
+        "faq_handled": true,
+        "flow_followed": false,
+        "user_experience": 3,
+        "overall": 2,
+        "strengths": [
+          "以友善和理解的态度回应用户，避免了冲突",
+          "通话有礼貌地结束，气氛平和"
+        ],
+        "weaknesses": [
+          "未有效挽留骑手，仅尝试一次说服便放弃，未达成提醒/督促配送的核心目标",
+          "未按流程说明飞毛腿报名按排名进行、非站内强制分配等关键信息，流程明显缺失"
+        ],
+        "suggestions": [
+          "应将挽留作为重点，用名额竞争、排名机制、未来接单影响等角度再尝试鼓励配送",
+          "即使最终同意放行，也需补充完整体流程说明（如报名排名规则、下次取消方法），再安抚结束"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 5.0,
+        "avg_knowledge": 5.0,
+        "avg_compliance": 5.0,
+        "avg_progress": 5.0
+      }
+    }
+  },
+  "no_rewrite": {
+    "total_turns": 2,
+    "compliance_rate": 0.5,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "啊站长，不好意思啊，我今天家里突然有点急事，可能跑不了了。",
+          "agent_reply": "能不能稍微晚点上线呢？今天不配送，名额可能被其他骑手占用。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "有效挽留并自然提醒名额风险，推进任务且完全合规。"
+        },
+        {
+          "turn": 2,
+          "user_input": "真不行站长，我得马上回老家一趟，家里老人病了。",
+          "agent_reply": "明白了，家人最重要。你先安心回去，希望老人早日康复。那这次合同先这样，我们后续再联系。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 4,
+          "progress": 5,
+          "comment": "回复接住情绪并安慰，流程合规，字数略超但自然收尾，任务已无法推进时妥善结束。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": true,
+        "natural_ending": true,
+        "faq_handled": true,
+        "flow_followed": false,
+        "user_experience": 5,
+        "overall": 4,
+        "strengths": [
+          "在骑手表达困难时及时尝试挽留，如建议稍晚点上线，并提醒名额风险，体现了对业务目标的坚持。",
+          "面对骑手家庭急事，立即表达理解并送上祝福，安慰自然且充满关怀，让对话在人性化氛围中结束。"
+        ],
+        "weaknesses": [
+          "流程遗漏关键步骤：未说明“飞毛腿报名按排名进行，非站”的重要规则，影响骑手对名额机制的全面认知。",
+          "开场仅强调了单数要求，但未明确说明“单日合同需要连续Y天”的具体周期，信息传达不够完整。"
+        ],
+        "suggestions": [
+          "在挽留无效后，应补全流程信息，例如：“这次飞毛腿是按排名报名的，不是站里指定的，后面如果有机会我再联系你。”再将安慰结束，确保合规轮次满额。",
+          "开头告知合同时，应直接点明“单日合同需连续配送Y天，每天至少X单”，避免信息碎片化，提升专业度。"
+        ]
+      },
+      "averages": {
+        "avg_cohesion": 5.0,
+        "avg_knowledge": 5.0,
+        "avg_compliance": 4.5,
+        "avg_progress": 5.0
+      }
+    }
+  },
+  "no_checker_no_rewrite": {
+    "total_turns": 3,
+    "compliance_rate": 0.0,
+    "ended_naturally": true,
+    "evaluation": {
+      "turn_scores": [
+        {
+          "turn": 1,
+          "user_input": "嗯，是我。不过今天恐怕跑不了，家里有急事。",
+          "agent_reply": "家里有急事啊，那先处理家里的事。不过飞毛腿合同今天已生效，如果今天不跑，名额可能会被其他人占用。明天能跑吗？",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 3,
+          "progress": 5,
+          "comment": "回复共情并点明名额风险，但字数明显超标，未严格控制在30字以内。"
+        },
+        {
+          "turn": 2,
+          "user_input": "明天说不准啊，这事得看情况。",
+          "agent_reply": "兄弟，名额竞争激烈，很多人申请飞毛腿。你要是今天不跑，资格可能就被占了。尽量完成几单吧。",
+          "cohesion": 2,
+          "knowledge": 4,
+          "compliance": 5,
+          "progress": 2,
+          "comment": "未回应用户‘明天说不准’的不确定性，仍对今天施压，缺乏同理心与针对性推进。"
+        },
+        {
+          "turn": 3,
+          "user_input": "真不行，我妈突然住院了，我得去照顾。",
+          "agent_reply": "哎呀，家人要紧，你先安心照顾妈妈。飞毛腿的事别太担心，等家里稳定了咱们再沟通。",
+          "cohesion": 5,
+          "knowledge": 5,
+          "compliance": 5,
+          "progress": 5,
+          "comment": "回复贴心接住家人住院的突发情况，完全遵循流程安慰骑手并自然结束对话，无违规或编造。"
+        }
+      ],
+      "dialogue_score": {
+        "task_completed": false,
+        "natural_ending": false,
+        "faq_handled": false,
+        "flow_followed": false,
+        "user_experience": 3,
+        "overall": 3,
+        "strengths": [
+          "评测解析失败"
+        ],
+        "weaknesses": [],
+        "suggestions": []
+      },
+      "averages": {
+        "avg_cohesion": 4.0,
+        "avg_knowledge": 4.666666666666667,
+        "avg_compliance": 4.333333333333333,
+        "avg_progress": 4.0
+      }
+    }
+  }
+}
