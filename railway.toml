@@ -1,0 +1,23 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "./Dockerfile"
+
+[deploy]
+startCommand = "uvicorn backend.api:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/api/health"
+restartPolicyType = "ON_FAILURE"
+
+[[envs]]
+key = "DEEPSEEK_API_KEY"
+description = "DeepSeek API密钥"
+required = true
+
+[[envs]]
+key = "DEEPSEEK_BASE_URL"
+description = "DeepSeek API地址"
+default = "https://api.deepseek.com"
+
+[[envs]]
+key = "DEEPSEEK_MODEL"
+description = "模型名称"
+default = "deepseek-chat"

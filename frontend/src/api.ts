@@ -1,6 +1,7 @@
 import type { StateEdge, StateNode } from './types'
 
-export const API_BASE = 'http://localhost:8000'
+// 生产环境使用环境变量VITE_API_BASE，开发环境通过vite proxy走相对路径
+export const API_BASE = import.meta.env.VITE_API_BASE || ''
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, init)

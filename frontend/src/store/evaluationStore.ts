@@ -5,8 +5,8 @@ const stages: PipelineStep[] = [
   { id: 'parsing', title: '指令解析', subtitle: '提取角色 / 目标 / 约束', status: 'idle' },
   { id: 'dsl_compile', title: 'DSL 编译', subtitle: '任务变状态机', status: 'idle' },
   { id: 'scenario_gen', title: '场景生成', subtitle: 'CGADS 覆盖补洞', status: 'idle' },
-  { id: 'dialogue', title: '对话模拟', subtitle: '多画像多轮试炼', status: 'idle' },
-  { id: 'scoring', title: '评测评分', subtitle: '证据链裁决', status: 'idle' },
+  { id: 'dialogue', title: '对话模拟', subtitle: '多画像多轮试探', status: 'idle' },
+  { id: 'scoring', title: '评测评分', subtitle: '证据链装订', status: 'idle' },
 ]
 
 const emptyScore: ScoreState = {
@@ -55,7 +55,7 @@ interface EvaluationStore {
 const normalizeStage = (stage: string): PipelineStage => {
   if (stage === 'dsl') return 'dsl_compile'
   if (stage === 'scenario') return 'scenario_gen'
-  if (stage === 'dialogue') return 'dialogue'
+  if (stage === 'scenario_generate') return 'scenario_gen'
   return stage as PipelineStage
 }
 
@@ -184,6 +184,8 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
     if (event === 'coverage_update') {
       set((state) => ({
         coverage: { state: pct(data.state), edge: pct(data.edge), risk: pct(data.risk), requirement: pct(data.requirement) },
+        currentState: data.state_id ?? data.state,
+        visitedStates: new Set([...state.visitedStates, data.state].filter(Boolean)),
         timeline: [...state.timeline, { id: `coverage-${state.timeline.length}`, kind: 'coverage', title: `覆盖命中 ${data.scenario_id}`, detail: `状态 ${pct(data.state)}% / 边 ${pct(data.edge)}% / 风险 ${pct(data.risk)}% / 要求 ${pct(data.requirement)}%`, meta: 'coverage' }],
       }))
       return

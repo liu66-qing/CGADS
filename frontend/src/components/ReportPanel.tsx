@@ -1,8 +1,8 @@
-import { ChevronDown, Copy, Download } from 'lucide-react'
+import { ChevronDown, Copy, Download, RefreshCw } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { getReportDownloadUrl, getReportJson, getReportMarkdown } from '../api'
 import { useEvaluationStore } from '../store/evaluationStore'
 import { ThemeIcon } from './ThemeIcon'
-import { getReportDownloadUrl, getReportJson, getReportMarkdown } from '../api'
 
 export function ReportPanel() {
   const open = useEvaluationStore((s) => s.reportOpen)
@@ -18,14 +18,14 @@ export function ReportPanel() {
 
 ## 总览
 - 综合得分：${score.totalScore || '--'}/100
-- 判定：${score.passStatus}
+- 评测判定：${score.passStatus}
 - 覆盖率：状态 ${coverage.state}% / 边 ${coverage.edge}% / 风险 ${coverage.risk}% / 要求 ${coverage.requirement}%
 
 ## 场景摘要
 ${score.scenarios.map((s) => `- ${s.id}: ${s.turns} 轮，${s.score} 分，P0 ${s.p0} / P1 ${s.p1}`).join('\n') || '- 暂无场景结果'}
 
 ## 优化建议
-${(score.suggestions.length ? score.suggestions : ['等待 pipeline_complete 生成建议']).map((s) => `- ${s}`).join('\n')}
+${(score.suggestions.length ? score.suggestions : ['等待 pipeline_complete 生成正式建议']).map((s) => `- ${s}`).join('\n')}
 `
   const markdown = backendMarkdown || fallbackMarkdown
 
@@ -33,8 +33,9 @@ ${(score.suggestions.length ? score.suggestions : ['等待 pipeline_complete 生
     if (!backendMarkdown) {
       try {
         const report = await getReportMarkdown()
-        setReportMarkdown(report.markdown ?? '')
-        await navigator.clipboard.writeText(report.markdown ?? fallbackMarkdown)
+        const text = report.markdown ?? ''
+        setReportMarkdown(text)
+        await navigator.clipboard.writeText(text || fallbackMarkdown)
         setBackendStatus('ok')
         return
       } catch {
@@ -76,8 +77,8 @@ ${(score.suggestions.length ? score.suggestions : ['等待 pipeline_complete 生
       </button>
 
       <div className="report-delivery-bar">
-        <button onClick={copyText}><Copy size={16} /> 复制报告文本</button>
-        <button onClick={refreshReport}><Download size={16} /> 刷新后端报告</button>
+        <button onClick={copyText}><Copy size={16} /> 复制文本</button>
+        <button onClick={refreshReport}><RefreshCw size={16} /> 刷新报告</button>
         <button onClick={() => downloadReport('markdown')}><Download size={16} /> 下载 Markdown</button>
         <button onClick={() => downloadReport('json')}><Download size={16} /> 下载 JSON</button>
       </div>

@@ -1,27 +1,57 @@
 import { ChevronDown, Database, FileUp, Play, Sparkles, Square } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent } from 'react'
+import { compileDslPreview, getExamples } from '../api'
+import { defaultOfficialExample, officialExamples, type OfficialExample } from '../data/officialExamples'
 import { useEvaluationSse } from '../hooks/useEvaluationSse'
 import { useEvaluationStore } from '../store/evaluationStore'
-import { defaultOfficialExample, officialExamples } from '../data/officialExamples'
 import { ThemeIcon } from './ThemeIcon'
-import { compileDslPreview } from '../api'
 
 export function InputPanel() {
   const [open, setOpen] = useState(true)
   const [fileName, setFileName] = useState('')
+  const [selectedId, setSelectedId] = useState(defaultOfficialExample.id)
+  const [previewing, setPreviewing] = useState(false)
+  const [examples, setExamples] = useState<OfficialExample[]>(officialExamples)
+
   const instruction = useEvaluationStore((s) => s.instruction)
   const setInstruction = useEvaluationStore((s) => s.setInstruction)
   const running = useEvaluationStore((s) => s.running)
-  const { start, stop } = useEvaluationSse()
-  const [selectedId, setSelectedId] = useState(defaultOfficialExample.id)
-  const [previewing, setPreviewing] = useState(false)
-  const selectedExample = officialExamples.find((item) => item.id === selectedId) ?? defaultOfficialExample
   const setDslPreview = useEvaluationStore((s) => s.setDslPreview)
   const setBackendStatus = useEvaluationStore((s) => s.setBackendStatus)
+  const { start, stop } = useEvaluationSse()
+
+  useEffect(() => {
+    let alive = true
+    getExamples()
+      .then((payload) => {
+        if (!alive || !payload.examples?.length) return
+        const remoteExamples = payload.examples.map((item) => ({
+          id: item.id,
+          name: item.name,
+          badge: item.goal ? '后端官方示例' : '官方示例',
+          instruction: item.goal || item.name,
+        }))
+        setExamples(remoteExamples)
+        setSelectedId(remoteExamples[0].id)
+        setBackendStatus('ok')
+      })
+      .catch(() => setBackendStatus('offline'))
+
+    return () => {
+      alive = false
+    }
+  }, [setBackendStatus])
+
+  const selectedExample = useMemo(
+    () => examples.find((item) => item.id === selectedId) ?? examples[0] ?? defaultOfficialExample,
+    [examples, selectedId],
+  )
+
+  const effectiveInstruction = instruction || selectedExample.instruction
 
   const useExample = (id: string) => {
-    const next = officialExamples.find((item) => item.id === id) ?? defaultOfficialExample
+    const next = examples.find((item) => item.id === id) ?? defaultOfficialExample
     setSelectedId(next.id)
     setFileName('')
     setInstruction(next.instruction)
@@ -38,7 +68,7 @@ export function InputPanel() {
   const previewDsl = async () => {
     setPreviewing(true)
     try {
-      const result = await compileDslPreview(instruction || selectedExample.instruction)
+      const result = await compileDslPreview(effectiveInstruction)
       setDslPreview(result.states ?? [], result.edges ?? [])
       setBackendStatus('ok')
     } catch {
@@ -83,7 +113,7 @@ export function InputPanel() {
             <div className="official-select-wrap">
               <small>官方示例</small>
               <select value={selectedId} onChange={(event) => useExample(event.target.value)}>
-                {officialExamples.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {examples.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
             </div>
             <p><Database size={16} /> {selectedExample.badge}</p>
@@ -95,7 +125,7 @@ export function InputPanel() {
             <span>{fileName ? `已载入：${fileName}` : instruction ? '已输入任务文本' : '可直接使用官方示例'}</span>
             <button
               className={running ? 'start-button stop' : 'start-button'}
-              onClick={() => (running ? stop() : start(instruction || selectedExample.instruction))}
+              onClick={() => (running ? stop() : start(effectiveInstruction))}
             >
               {running ? <Square size={20} /> : <Play size={22} fill="currentColor" />}
               {running ? '停止评测' : '开始评测'}
