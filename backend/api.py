@@ -54,6 +54,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve React前端build产物（如果存在）
+_frontend_dist = PROJECT_ROOT / "frontend" / "dist"
+if _frontend_dist.exists():
+    from fastapi.staticfiles import StaticFiles
+    # API路由优先，静态文件兜底
+    @app.on_event("startup")
+    async def _mount_frontend():
+        app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
+
 
 # ============================================================
 # Models

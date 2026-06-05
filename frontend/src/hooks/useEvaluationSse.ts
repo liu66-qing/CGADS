@@ -1,7 +1,6 @@
 import { useRef } from 'react'
 import { useEvaluationStore } from '../store/evaluationStore'
-
-const API_BASE = 'http://localhost:8000'
+import { API_BASE, getEvaluations, getReportJson, getReportMarkdown } from '../api'
 
 async function streamEvents(response: Response, onEvent: (event: string, data: any) => void) {
   const reader = response.body?.getReader()
@@ -30,6 +29,10 @@ export function useEvaluationSse() {
   const resetRun = useEvaluationStore((s) => s.resetRun)
   const setRunning = useEvaluationStore((s) => s.setRunning)
   const handleEvent = useEvaluationStore((s) => s.handleEvent)
+  const setReportMarkdown = useEvaluationStore((s) => s.setReportMarkdown)
+  const setReportJson = useEvaluationStore((s) => s.setReportJson)
+  const setEvaluations = useEvaluationStore((s) => s.setEvaluations)
+  const setBackendStatus = useEvaluationStore((s) => s.setBackendStatus)
 
   const start = async (instruction: string) => {
     abortRef.current?.abort()
@@ -46,6 +49,19 @@ export function useEvaluationSse() {
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       await streamEvents(response, handleEvent)
+      try {
+        const [report, reportJson, evaluations] = await Promise.all([
+          getReportMarkdown(),
+          getReportJson(),
+          getEvaluations(),
+        ])
+        setReportMarkdown(report.markdown ?? '')
+        setReportJson(reportJson)
+        setEvaluations(evaluations.evaluations ?? [])
+        setBackendStatus('ok')
+      } catch {
+        setBackendStatus('offline')
+      }
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
         handleEvent('stage_error', { stage: 'parsing', error: (error as Error).message })

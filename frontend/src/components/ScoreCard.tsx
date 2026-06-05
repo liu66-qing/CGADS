@@ -1,7 +1,8 @@
-import { Award, ShieldAlert } from 'lucide-react'
+import { ShieldAlert } from 'lucide-react'
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } from 'recharts'
 import { useEvaluationStore } from '../store/evaluationStore'
 import { CoverageDashboard } from './CoverageDashboard'
+import { ThemeIcon } from './ThemeIcon'
 
 const dimensionMap: Record<string, string> = {
   task_completion: '任务完成',
@@ -24,20 +25,23 @@ export function ScoreCard() {
   const passClass = score.passStatus === 'PASS' ? 'pass' : score.passStatus === 'WAITING' ? 'waiting' : 'fail'
 
   return (
-    <section className="panel score-panel">
-      <header>
-        <h2>结果面板</h2>
-        <span>当前 pipeline 推进至评分裁决</span>
+    <section className="panel score-panel plugin-panel">
+      <header className="section-head">
+        <div>
+          <h2>结果面板</h2>
+          <p>覆盖、评分和违规证据会在这里汇总</p>
+        </div>
+        <span className="next-cue">下一步看：证据时间轴</span>
       </header>
       <div className="score-layout">
-        <div className="score-total">
-          <Award size={28} />
+        <div className="score-total plugin-card">
+          <ThemeIcon name="score" size={42} />
           <span>综合得分</span>
           <strong>{score.totalScore || '--'}<em>/100</em></strong>
           <b className={passClass}>{score.passStatus}</b>
           <small>结合覆盖率 {Math.round((coverage.state + coverage.edge + coverage.risk + coverage.requirement) / 4)}%</small>
         </div>
-        <div className="radar-box">
+        <div className="radar-box plugin-card">
           <ResponsiveContainer width="100%" height={220}>
             <RadarChart data={data}>
               <PolarGrid />
@@ -46,7 +50,7 @@ export function ScoreCard() {
             </RadarChart>
           </ResponsiveContainer>
         </div>
-        <div className="dimension-bars">
+        <div className="dimension-bars plugin-card">
           {data.map((item) => (
             <label key={item.subject}>
               <span>{item.subject}</span>
@@ -57,7 +61,7 @@ export function ScoreCard() {
         </div>
       </div>
       <CoverageDashboard />
-      <div className="violation-table">
+      <div className="violation-table plugin-card">
         <h3><ShieldAlert size={16} /> 评分详情</h3>
         {(score.violations.length ? score.violations : [{ rule_id: '等待证据链', scenario: '评测启动后生成' }]).slice(0, 5).map((item, index) => (
           <div key={index}>

@@ -9,14 +9,14 @@ export function StepDetailPanel() {
   return (
     <section className="panel step-detail">
       <div>
-        <h3>当前执行步骤自动展开</h3>
+        <h3>当前步骤自动展开</h3>
         <strong>{active.title}</strong>
         <p>{active.error || active.subtitle}</p>
       </div>
       <div className="log-strip">
         <span>Round：{rounds.length || 0}</span>
         <span>识别缺口：{gaps.length}</span>
-        <span>目标拓展数：{Math.max(0, gaps.length * 2)}</span>
+        <span>目标拓展：{Math.max(0, gaps.length * 2)}</span>
         <span>状态覆盖：{coverage.state}%</span>
       </div>
       <div className="scenario-preview">

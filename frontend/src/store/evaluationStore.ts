@@ -33,10 +33,22 @@ interface EvaluationStore {
   rounds: Array<Record<string, unknown>>
   gaps: unknown[]
   reportOpen: boolean
+  reportMarkdown: string
+  reportJson?: Record<string, unknown>
+  stateNames: Record<string, string>
+  dimensionLabels: Record<string, string>
+  evaluations: Array<Record<string, unknown>>
+  backendStatus: 'unknown' | 'ok' | 'offline'
   setInstruction: (instruction: string) => void
   resetRun: () => void
   setRunning: (running: boolean) => void
   setReportOpen: (open: boolean) => void
+  setReportMarkdown: (markdown: string) => void
+  setReportJson: (reportJson: Record<string, unknown>) => void
+  setMappings: (stateNames: Record<string, string>, dimensionLabels: Record<string, string>) => void
+  setEvaluations: (evaluations: Array<Record<string, unknown>>) => void
+  setBackendStatus: (status: 'unknown' | 'ok' | 'offline') => void
+  setDslPreview: (states: StateNode[], edges: StateEdge[]) => void
   handleEvent: (event: string, data: any) => void
 }
 
@@ -69,9 +81,30 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
   rounds: [],
   gaps: [],
   reportOpen: false,
+  reportMarkdown: '',
+  stateNames: {},
+  dimensionLabels: {},
+  evaluations: [],
+  backendStatus: 'unknown',
   setInstruction: (instruction) => set({ instruction }),
   setRunning: (running) => set({ running }),
   setReportOpen: (reportOpen) => set({ reportOpen }),
+  setReportMarkdown: (reportMarkdown) => set({ reportMarkdown }),
+  setReportJson: (reportJson) => set({ reportJson }),
+  setMappings: (stateNames, dimensionLabels) => set({ stateNames, dimensionLabels }),
+  setEvaluations: (evaluations) => set({ evaluations }),
+  setBackendStatus: (backendStatus) => set({ backendStatus }),
+  setDslPreview: (states, edges) =>
+    set((state) => ({
+      states,
+      edges,
+      pipeline: setStep(setStep(state.pipeline, 'parsing', 'done'), 'dsl_compile', 'done', { result: { state_count: states.length, edge_count: edges.length } }),
+      activeStage: 'dsl_compile',
+      timeline: [
+        ...state.timeline,
+        { id: `dsl-preview-${state.timeline.length}`, kind: 'transition', title: 'DSL 预览完成', detail: `编译得到 ${states.length} 个状态、${edges.length} 条边。`, meta: 'preview' },
+      ],
+    })),
   resetRun: () =>
     set({
       running: true,
@@ -87,6 +120,8 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
       rounds: [],
       gaps: [],
       reportOpen: false,
+      reportMarkdown: '',
+      reportJson: undefined,
     }),
   handleEvent: (event, data) => {
     const stage = normalizeStage(data?.stage)

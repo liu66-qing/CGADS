@@ -1,5 +1,6 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { useEvaluationStore } from '../store/evaluationStore'
+import { ThemeIcon } from './ThemeIcon'
 
 const labels = [
   ['state', '状态覆盖'],
@@ -17,7 +18,8 @@ export function CoverageDashboard() {
       {labels.map(([key, label]) => {
         const value = coverage[key]
         return (
-          <article className="coverage-ring" key={key}>
+          <article className="coverage-ring plugin-card" key={key}>
+            <ThemeIcon name="coverage" size={22} className="coverage-mini-icon" />
             <ResponsiveContainer width="100%" height={92}>
               <PieChart>
                 <Pie data={[{ value }, { value: 100 - value }]} innerRadius={30} outerRadius={40} startAngle={90} endAngle={-270} dataKey="value">
