@@ -64,6 +64,7 @@ class InstructionParser:
             [{"role": "user", "content": prompt}],
             max_tokens=4096,
             temperature=0.2,
+            timeout=40,
         )
 
         # 尝试解析JSON（多种容错策略）

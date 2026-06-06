@@ -214,7 +214,7 @@ async def _chat_with_timeout(
 async def _parse_instruction_with_timeout(
     llm: DeepSeekClient,
     instruction: str,
-    timeout_s: float = 18.0,
+    timeout_s: float = 45.0,
 ) -> dict[str, Any]:
     """Run instruction parsing off the event loop with a bounded wait."""
     parser = InstructionParser(llm)
@@ -326,8 +326,12 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
                 "max_reply_length": parsed_task.get("max_reply_length", 30),
             },
         })
+    except asyncio.TimeoutError:
+        yield sse_event("stage_error", {"stage": "parsing", "error": "指令解析超时(45s)，DeepSeek API响应过慢，请重试"})
+        return
     except Exception as exc:
-        yield sse_event("stage_error", {"stage": "parsing", "error": str(exc)})
+        logger.exception("parsing stage error")
+        yield sse_event("stage_error", {"stage": "parsing", "error": f"解析失败: {type(exc).__name__}: {exc}"})
         return
 
     await asyncio.sleep(0.1)
