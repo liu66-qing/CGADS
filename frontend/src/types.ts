@@ -55,6 +55,31 @@ export interface TimelineItem {
   title: string
   detail: string
   meta?: string
+  dialogueExcerpt?: {
+    turn: number
+    agentUtterance: string
+    userUtterance: string
+    ruleName?: string
+    ruleMessage?: string
+  }
+}
+
+export interface DialogueMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface ScenarioDialogue {
+  scenarioId: string
+  messages: DialogueMessage[]
+  persona?: string
+  violationDetails?: Array<{
+    turn: number
+    agentUtterance: string
+    userUtterance: string
+    state: string
+    violations: Array<{ rule_name: string; message: string }>
+  }>
 }
 
 export interface ScoreState {

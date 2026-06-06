@@ -62,7 +62,7 @@ export function useEvaluationSse() {
           response = await fetch(`${API_BASE}/api/evaluate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ instruction, budget: 4, warmup_ratio: 0.5, max_turns: 6 }),
+            body: JSON.stringify({ instruction, budget: 2, warmup_ratio: 0.5, max_turns: 3 }),
             signal: controller.signal,
           })
         }

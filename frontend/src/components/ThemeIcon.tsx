@@ -1,4 +1,4 @@
-type IconName = 'state' | 'coverage' | 'score' | 'timeline' | 'report' | 'scenario' | 'team' | 'bell'
+type IconName = 'state' | 'coverage' | 'score' | 'timeline' | 'report' | 'scenario' | 'team' | 'bell' | 'chat'
 
 interface ThemeIconProps {
   name: IconName
@@ -65,6 +65,12 @@ export function ThemeIcon({ name, size = 24, className = '' }: ThemeIconProps) {
         <>
           <path d="M20 43V28c0-8 5-14 12-14s12 6 12 14v15l6 7H14l6-7Z" fill="#071322" stroke={`url(#orange-blue-${name})`} strokeWidth="4" />
           <path d="M27 53c2 5 8 5 10 0" stroke="#ffb020" strokeWidth="4" strokeLinecap="round" />
+        </>
+      )}
+      {name === 'chat' && (
+        <>
+          <path d="M12 14h40v28H26l-10 10V42H12V14Z" fill="#071322" stroke={`url(#orange-blue-${name})`} strokeWidth="4" />
+          <path d="M22 26h20M22 34h14" stroke="#ff8a00" strokeWidth="4" strokeLinecap="round" />
         </>
       )}
     </svg>

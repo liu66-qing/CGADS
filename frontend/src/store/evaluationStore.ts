@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CoverageState, PipelineStage, PipelineStep, ScoreState, StateEdge, StateNode, StepStatus, TimelineItem } from '../types'
+import type { CoverageState, PipelineStage, PipelineStep, ScenarioDialogue, ScoreState, StateEdge, StateNode, StepStatus, TimelineItem } from '../types'
 
 const stages: PipelineStep[] = [
   { id: 'parsing', title: '指令解析', subtitle: '提取角色 / 目标 / 约束', status: 'idle' },
@@ -36,6 +36,7 @@ interface EvaluationStore {
   timeline: TimelineItem[]
   rounds: Array<Record<string, unknown>>
   gaps: unknown[]
+  dialogues: Record<string, ScenarioDialogue>
   reportOpen: boolean
   reportMarkdown: string
   reportJson?: Record<string, unknown>
@@ -99,6 +100,7 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
   timeline: [],
   rounds: [],
   gaps: [],
+  dialogues: {},
   reportOpen: false,
   reportMarkdown: '',
   stateNames: {},
@@ -142,6 +144,7 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
       timeline: [],
       rounds: [],
       gaps: [],
+      dialogues: {},
       reportOpen: false,
       reportMarkdown: '',
       reportJson: undefined,
@@ -216,14 +219,40 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
       return
     }
     if (event === 'scenario_complete') {
+      const violationDetails = data.violation_details ?? []
+      const firstViolation = violationDetails[0]
+      const excerpt = firstViolation ? {
+        turn: firstViolation.turn,
+        agentUtterance: firstViolation.agent_utterance,
+        userUtterance: firstViolation.user_utterance,
+        ruleName: firstViolation.violations?.[0]?.rule_name,
+        ruleMessage: firstViolation.violations?.[0]?.message,
+      } : undefined
+
       set((state) => ({
         score: {
           ...state.score,
           scenarios: [...state.score.scenarios, { id: data.scenario_id, turns: data.turns, score: data.score, p0: data.p0_count, p1: data.p1_count }],
         },
+        dialogues: {
+          ...state.dialogues,
+          [data.scenario_id]: {
+            scenarioId: data.scenario_id,
+            messages: data.dialogue_history ?? [],
+            persona: data.user_persona,
+            violationDetails,
+          },
+        },
         timeline: [
           ...state.timeline,
-          { id: `scenario-${state.timeline.length}`, kind: data.p0_count ? 'p0' : data.p1_count ? 'p1' : 'transition', title: `${data.scenario_id} 完成`, detail: `${data.turns} 轮对话，得分 ${data.score}，P0 ${data.p0_count} / P1 ${data.p1_count}`, meta: 'scenario' },
+          {
+            id: `scenario-${state.timeline.length}`,
+            kind: data.p0_count ? 'p0' : data.p1_count ? 'p1' : 'transition',
+            title: `${data.scenario_id} 完成`,
+            detail: `${data.turns} 轮对话，得分 ${data.score}，P0 ${data.p0_count} / P1 ${data.p1_count}`,
+            meta: 'scenario',
+            dialogueExcerpt: excerpt,
+          },
         ],
       }))
       return

@@ -91,12 +91,22 @@ def compute_raw_weighted_score(dimension_scores: dict[str, int]) -> float:
     return sum(dimension_scores[name] / 5 * weight for name, weight in DIMENSION_WEIGHTS.items())
 
 
-def compute_final_score(dimension_scores: dict[str, int], p0_count: int, p1_count: int) -> float:
+def compute_final_score(
+    dimension_scores: dict[str, int],
+    p0_count: int,
+    p1_count: int,
+    coverage_ratios: dict[str, float] | None = None,
+) -> float:
     raw_score = compute_raw_weighted_score(dimension_scores)
     if p0_count:
         return min(raw_score, 30)
     if p1_count >= 3:
         return min(raw_score, 50)
+    if coverage_ratios:
+        req = coverage_ratios.get("requirement", 1.0)
+        risk = coverage_ratios.get("risk", 1.0)
+        if req == 0 or risk < 0.3:
+            return min(raw_score, 50)
     if p1_count == 2:
         return min(raw_score, 60)
     if p1_count == 1:

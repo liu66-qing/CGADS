@@ -21,7 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Windows GBK fix
 if sys.platform == "win32":
@@ -60,10 +60,11 @@ _frontend_dist = PROJECT_ROOT / "frontend" / "dist"
 # ============================================================
 
 class EvalRequest(BaseModel):
-    instruction: str
-    budget: int = 8
-    warmup_ratio: float = 0.5
-    max_turns: int = 10
+    """单个评测任务请求"""
+    instruction: str = Field(..., description="任务指令文本，描述外呼数字人需要完成的完整任务")
+    budget: int = Field(8, description="场景预算：总共生成多少个模拟对话场景")
+    warmup_ratio: float = Field(0.5, description="热身轮占比，剩余为定向补测轮")
+    max_turns: int = Field(10, description="每个场景最大对话轮次")
 
 
 class EvaluationJob:
@@ -210,6 +211,19 @@ async def _chat_with_timeout(
     return fallback
 
 
+async def _parse_instruction_with_timeout(
+    llm: DeepSeekClient,
+    instruction: str,
+    timeout_s: float = 18.0,
+) -> dict[str, Any]:
+    """Run instruction parsing off the event loop with a bounded wait."""
+    parser = InstructionParser(llm)
+    return await asyncio.wait_for(
+        asyncio.to_thread(parser.parse, instruction),
+        timeout=timeout_s,
+    )
+
+
 def _write_realtime_eval_result(
     *,
     parsed_task: dict[str, Any],
@@ -280,13 +294,16 @@ DIMENSION_DISPLAY = {
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
+    realtime_budget = min(max(1, request.budget), 2)
+    realtime_max_turns = min(max(1, request.max_turns), 3)
+    realtime_warmup_ratio = min(max(request.warmup_ratio, 0.1), 1.0)
     pipeline_started = time.time()
     started_at = datetime.now()
     logger.info(
         "evaluation started budget=%s warmup_ratio=%s max_turns=%s instruction_chars=%s",
-        request.budget,
-        request.warmup_ratio,
-        request.max_turns,
+        realtime_budget,
+        realtime_warmup_ratio,
+        realtime_max_turns,
         len(request.instruction or ""),
     )
     llm = DeepSeekClient()
@@ -294,8 +311,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     yield sse_event("stage_start", {"stage": "parsing", "label": "指令解析"})
     t0 = time.time()
     try:
-        parser = InstructionParser(llm)
-        parsed_task = parser.parse(request.instruction)
+        parsed_task = await _parse_instruction_with_timeout(llm, request.instruction)
         duration = round(time.time() - t0, 2)
         yield sse_event("stage_complete", {
             "stage": "parsing",
@@ -360,7 +376,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     generator = CoverageDrivenScenarioGenerator(dsl)
     coverage_tracker = CoverageTracker(dsl)
-    warmup_k = max(2, int(request.budget * request.warmup_ratio))
+    warmup_k = min(realtime_budget, max(1, int(realtime_budget * realtime_warmup_ratio)))
 
     all_scenarios = generator.generate_base()
     scenarios_round1 = all_scenarios[:warmup_k]
@@ -377,7 +393,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         "duration_s": round(time.time() - t0, 2),
         "result": {
             "warmup_scenarios": len(scenarios_round1),
-            "budget": request.budget,
+            "budget": realtime_budget,
         },
     })
 
@@ -389,7 +405,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     scenario_results = []
     for idx, scenario in enumerate(scenarios_round1):
-        result = await _run_single_scenario(scenario, idx, parsed_task, dsl, llm, request.max_turns)
+        result = await _run_single_scenario(scenario, idx, parsed_task, dsl, llm, realtime_max_turns)
         scenario_results.append(result)
 
         coverage_tracker.record_scenario(
@@ -415,11 +431,24 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             "score": result.get("final_score", 0),
             "p0_count": result.get("p0_count", 0),
             "p1_count": result.get("p1_count", 0),
+            "dialogue_history": result.get("dialogue_history", [])[:20],
+            "user_persona": scenario.get("persona", scenario.get("name", "")),
+            "violation_details": [
+                {
+                    "turn": item["turn"],
+                    "agent_utterance": item.get("agent_utterance", ""),
+                    "user_utterance": item.get("user_utterance", ""),
+                    "state": item.get("state", ""),
+                    "violations": item.get("violations", []),
+                }
+                for item in result.get("rule_results", [])
+                if not item.get("compliant", True)
+            ][:5],
         })
 
     # Gap鍒嗘瀽
     gaps = coverage_tracker.uncovered_targets()
-    remaining_budget = request.budget - len(scenarios_round1)
+    remaining_budget = realtime_budget - len(scenarios_round1)
 
     if gaps and remaining_budget > 0:
         yield sse_event("cgads_gaps", {
@@ -437,7 +466,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         })
 
         for idx, scenario in enumerate(gap_scenarios):
-            result = await _run_single_scenario(scenario, len(scenarios_round1) + idx, parsed_task, dsl, llm, request.max_turns)
+            result = await _run_single_scenario(scenario, len(scenarios_round1) + idx, parsed_task, dsl, llm, realtime_max_turns)
             scenario_results.append(result)
 
             coverage_tracker.record_scenario(
@@ -463,6 +492,19 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
                 "score": result.get("final_score", 0),
                 "p0_count": result.get("p0_count", 0),
                 "p1_count": result.get("p1_count", 0),
+                "dialogue_history": result.get("dialogue_history", [])[:20],
+                "user_persona": scenario.get("persona", scenario.get("name", "")),
+                "violation_details": [
+                    {
+                        "turn": item["turn"],
+                        "agent_utterance": item.get("agent_utterance", ""),
+                        "user_utterance": item.get("user_utterance", ""),
+                        "state": item.get("state", ""),
+                        "violations": item.get("violations", []),
+                    }
+                    for item in result.get("rule_results", [])
+                    if not item.get("compliant", True)
+                ][:5],
             })
 
     duration = round(time.time() - t0, 2)
@@ -515,7 +557,16 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     elif total_p1 > 0:
         pass_status = "CAPPED_P1"
     else:
-        pass_status = "PASS"
+        state_ratio = final_coverage.get("state_coverage", {}).get("ratio", 0)
+        edge_ratio = final_coverage.get("transition_coverage", {}).get("ratio", 0)
+        risk_ratio = final_coverage.get("risk_coverage", {}).get("ratio", 0)
+        req_ratio = final_coverage.get("requirement_coverage", {}).get("ratio", 0)
+        if req_ratio == 0 or risk_ratio < 0.3:
+            pass_status = "INADEQUATE"
+        elif state_ratio < 0.8 or edge_ratio < 0.6 or risk_ratio < 0.8 or req_ratio < 0.7:
+            pass_status = "INADEQUATE"
+        else:
+            pass_status = "PASS"
 
     yield sse_event("stage_complete", {
         "stage": "scoring",
@@ -540,7 +591,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         uncovered_targets=coverage_tracker.uncovered_targets(),
         scenario_results=scenario_results,
         started_at=started_at,
-        budget=request.budget,
+        budget=realtime_budget,
         warmup_k=warmup_k,
         rounds=rounds,
     )
@@ -614,7 +665,7 @@ async def _run_single_scenario(
             agent_msg = await _chat_with_timeout(llm, [
                 {"role": "system", "content": f"你是{parsed_task.get('role','')}。目标:{parsed_task.get('goal','')[:30]}。只输出一句话，不超过{parsed_task.get('max_reply_length',30)}字。"},
                 *history[-6:]
-            ], max_tokens=150, temperature=0.3, fallback="好的，我这边记录一下。")
+            ], max_tokens=120, temperature=0.3, timeout_s=4.0, fallback="好的，我这边记录一下。")
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)
@@ -625,7 +676,17 @@ async def _run_single_scenario(
             violations = [r for r in results if not r.passed]
             for v in violations:
                 violation_ids.append(v.rule_name)
-            rule_results_all.append({"turn": turn, "compliant": not violations})
+            rule_results_all.append({
+                "turn": turn,
+                "compliant": not violations,
+                "agent_utterance": agent_msg,
+                "user_utterance": user_reply,
+                "state": state_tracker.current_state,
+                "violations": [
+                    {"rule_name": v.rule_name, "message": v.message}
+                    for v in violations
+                ],
+            })
 
             if sim.should_hangup() or state_tracker.current_state in ("refusal_exit", "closing"):
                 break
@@ -1136,6 +1197,30 @@ async def compile_dsl_endpoint(instruction: str = ""):
             "forbidden_phrases": dsl.global_constraints.forbidden_phrases,
         },
     }
+
+
+class BatchEvalRequest(BaseModel):
+    """Batch evaluation request: submit multiple tasks at once."""
+    tasks: list[EvalRequest]
+
+
+@app.post("/api/batch-evaluate", summary="批量评测", description="提交多个任务指令进行批量评测，返回各任务的job_id")
+async def batch_evaluate(request: BatchEvalRequest):
+    """Submit multiple evaluation tasks. Each returns a job_id for polling."""
+    if not request.tasks:
+        raise HTTPException(status_code=400, detail="tasks不能为空")
+    if len(request.tasks) > 20:
+        raise HTTPException(status_code=400, detail="单次批量最多20个任务")
+
+    jobs = []
+    for task in request.tasks:
+        job_id = uuid.uuid4().hex[:12]
+        job = EvaluationJob(job_id, task)
+        EVALUATION_JOBS[job_id] = job
+        job.task = asyncio.create_task(_run_evaluation_job(job))
+        jobs.append({"job_id": job.id, "status": job.status, "instruction_preview": task.instruction[:50]})
+
+    return {"jobs": jobs, "total": len(jobs)}
 
 
 # ============================================================

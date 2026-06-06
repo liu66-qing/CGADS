@@ -4,7 +4,7 @@ import { ThemeIcon } from './ThemeIcon'
 export function EvidenceTimeline() {
   const timeline = useEvaluationStore((s) => s.timeline)
   const items = timeline.length ? timeline : [
-    { id: 'empty-1', kind: 'round', title: '等待第一条证据', detail: '开始评测后，场景生成、覆盖命中、违规与转移都会写入这里。', meta: 'idle' },
+    { id: 'empty-1', kind: 'round' as const, title: '等待评测', detail: '启动评测后此处实时展示证据链。', meta: '' },
   ]
   return (
     <section className="panel timeline-panel plugin-panel">
@@ -22,6 +22,18 @@ export function EvidenceTimeline() {
             <div>
               <strong>{item.title}</strong>
               <p>{item.detail}</p>
+              {item.dialogueExcerpt && (
+                <div className="evidence-excerpt">
+                  <div className="excerpt-turn">Turn {item.dialogueExcerpt.turn}</div>
+                  <div className="excerpt-line user-line">用户: {item.dialogueExcerpt.userUtterance}</div>
+                  <div className="excerpt-line agent-line">客服: {item.dialogueExcerpt.agentUtterance}</div>
+                  {item.dialogueExcerpt.ruleName && (
+                    <div className="excerpt-rule">
+                      {item.dialogueExcerpt.ruleName}: {item.dialogueExcerpt.ruleMessage}
+                    </div>
+                  )}
+                </div>
+              )}
               <span>{item.meta}</span>
             </div>
           </article>

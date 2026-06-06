@@ -1,6 +1,7 @@
 import { Circle } from 'lucide-react'
 import { useEffect } from 'react'
 import { getEvaluations, getHealth, getStateNames } from './api'
+import { DialogueViewer } from './components/DialogueViewer'
 import { EvidenceTimeline } from './components/EvidenceTimeline'
 import { HeroBanner } from './components/HeroBanner'
 import { HistoryStrip } from './components/HistoryStrip'
@@ -65,11 +66,15 @@ export function App() {
         <PipelineTracker />
         <HistoryStrip />
         <StepDetailPanel />
-        <div className="main-grid">
-          <StateMachineGraph />
+        <div className="main-grid results-primary">
           <ScoreCard />
         </div>
+        <details className="state-machine-collapsible" open>
+          <summary>状态机可视化（点击折叠）</summary>
+          <StateMachineGraph />
+        </details>
         <EvidenceTimeline />
+        <DialogueViewer />
         <ReportPanel />
       </div>
     </main>

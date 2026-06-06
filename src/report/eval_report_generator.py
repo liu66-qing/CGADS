@@ -111,7 +111,16 @@ def generate_eval_report(pipeline_output: dict[str, Any]) -> dict[str, Any]:
     elif p1_total > 0:
         pass_status = "CAPPED_P1"
     else:
-        pass_status = "PASS"
+        state_ratio = coverage_report.get("state_coverage", {}).get("ratio", 0)
+        edge_ratio = coverage_report.get("transition_coverage", {}).get("ratio", 0)
+        risk_ratio = coverage_report.get("risk_coverage", {}).get("ratio", 0)
+        req_ratio = coverage_report.get("requirement_coverage", {}).get("ratio", 0)
+        if req_ratio == 0 or risk_ratio < 0.3:
+            pass_status = "INADEQUATE"
+        elif state_ratio < 0.8 or edge_ratio < 0.6 or risk_ratio < 0.8 or req_ratio < 0.7:
+            pass_status = "INADEQUATE"
+        else:
+            pass_status = "PASS"
 
     overall_score = {
         "total_score": avg_score,
@@ -182,8 +191,26 @@ def generate_eval_report(pipeline_output: dict[str, Any]) -> dict[str, Any]:
         for vid in r.get("violation_rule_ids", []):
             severity = "P0" if "p0" in vid else "P1"
             risk_level = "high" if severity == "P0" else "medium"
-            failed_turns = _extract_failed_turns(r)
-            evidence_turn = failed_turns[0] if failed_turns else "未知"
+
+            violation_turn_data = _find_violation_turn(r, vid)
+            if violation_turn_data:
+                evidence_parts = [
+                    f"[Turn {violation_turn_data['turn']}]",
+                    f"用户: {violation_turn_data.get('user_utterance', '?')}",
+                    f"客服: {violation_turn_data.get('agent_utterance', '?')}",
+                    f"规则: {_rule_description(vid)}",
+                ]
+                viol_msg = next(
+                    (v.get("message", "") for v in violation_turn_data.get("violations", []) if v.get("rule_name") == vid),
+                    "",
+                )
+                if viol_msg:
+                    evidence_parts.append(f"扣分原因: {viol_msg}")
+                evidence_text = "\n".join(evidence_parts)
+            else:
+                failed_turns = _extract_failed_turns(r)
+                evidence_turn = failed_turns[0] if failed_turns else "未知"
+                evidence_text = f"场景'{r.get('scenario_id','')}' 第{evidence_turn}轮触发"
 
             checkpoints.append({
                 "checkpoint_id": vid,
@@ -191,12 +218,13 @@ def generate_eval_report(pipeline_output: dict[str, Any]) -> dict[str, Any]:
                 "score": 0 if severity == "P0" else 3,
                 "max_score": 10,
                 "result": "failed",
-                "evidence": f"场景'{r.get('scenario_id','')}' 第{evidence_turn}轮触发",
+                "evidence": evidence_text,
                 "reason": _rule_description(vid),
                 "risk_level": risk_level,
                 "suggestion": _rule_suggestion(vid),
                 "scenario_id": r.get("scenario_id", ""),
                 "severity": severity,
+                "dialogue_excerpt": violation_turn_data,
             })
 
     # ═══ Section 8: 典型失败对话片段 ═══
@@ -460,6 +488,16 @@ def write_eval_report(
 # ============================================================
 # Internal helpers
 # ============================================================
+
+def _find_violation_turn(result: dict[str, Any], rule_id: str) -> dict | None:
+    """Find the specific turn data where a rule violation occurred."""
+    for rule_item in result.get("rule_results", []):
+        if isinstance(rule_item, dict) and not rule_item.get("compliant", True):
+            for v in rule_item.get("violations", []):
+                if v.get("rule_name") == rule_id:
+                    return rule_item
+    return None
+
 
 def _extract_failed_turns(result: dict[str, Any]) -> list[int]:
     """从scenario result中提取失败轮次。"""

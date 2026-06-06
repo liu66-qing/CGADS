@@ -29,7 +29,7 @@ export function ScoreCard() {
       <header className="section-head">
         <div>
           <h2>结果面板</h2>
-          <p>覆盖、评分和违规证据会在这里汇总</p>
+          <p>覆盖、评分和违规证据会在这里汇总。</p>
         </div>
         <span className="next-cue">下一步看：证据时间轴</span>
       </header>
@@ -46,7 +46,7 @@ export function ScoreCard() {
             <RadarChart data={data}>
               <PolarGrid />
               <PolarAngleAxis dataKey="subject" tick={{ fontSize: 12, fill: '#344054' }} />
-              <Radar dataKey="value" stroke="#FF6B00" fill="#FF6B00" fillOpacity={0.22} />
+              <Radar dataKey="value" stroke="#2563eb" fill="#2563eb" fillOpacity={0.18} />
             </RadarChart>
           </ResponsiveContainer>
         </div>
@@ -63,13 +63,19 @@ export function ScoreCard() {
       <CoverageDashboard />
       <div className="violation-table plugin-card">
         <h3><ShieldAlert size={16} /> 评分详情</h3>
-        {(score.violations.length ? score.violations : [{ rule_id: '等待证据链', scenario: '评测启动后生成' }]).slice(0, 5).map((item, index) => (
+        {score.violations.length ? score.violations.slice(0, 5).map((item, index) => (
           <div key={index}>
-            <span className={index === 0 && score.violations.length ? 'hot' : ''}>{score.violations.length ? '违规' : '待测'}</span>
+            <span className={index === 0 ? 'hot' : ''}>违规</span>
             <b>{String(item.rule_id ?? 'rule')}</b>
             <small>{String(item.scenario ?? 'scenario')}</small>
           </div>
-        ))}
+        )) : (
+          <div className="violation-empty">
+            <span>待测</span>
+            <b>等待评测完成</b>
+            <small />
+          </div>
+        )}
       </div>
     </section>
   )
