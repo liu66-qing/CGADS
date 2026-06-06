@@ -294,8 +294,8 @@ DIMENSION_DISPLAY = {
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
-    realtime_budget = min(max(1, request.budget), 2)
-    realtime_max_turns = min(max(1, request.max_turns), 3)
+    realtime_budget = min(max(2, request.budget), 8)
+    realtime_max_turns = min(max(3, request.max_turns), 10)
     realtime_warmup_ratio = min(max(request.warmup_ratio, 0.1), 1.0)
     pipeline_started = time.time()
     started_at = datetime.now()
@@ -619,12 +619,112 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             }
             for r in valid_results
         ],
-        "suggestions": [
-            "针对未覆盖风险规则补充对应话术分支",
-            "对P1违规场景增加拒绝退出和验证路径话术",
-            "补充覆盖率缺口对应的用户画像测试",
-        ],
+        "suggestions": _generate_pipeline_suggestions(valid_results, final_coverage, all_violations),
     })
+
+
+def _generate_pipeline_suggestions(results: list[dict], coverage: dict, violations: list[dict]) -> list[str]:
+    """Generate specific, actionable optimization suggestions based on actual failures."""
+    suggestions = []
+
+    # Check for repeated agent replies
+    for r in results:
+        hist = r.get("dialogue_history", [])
+        agent_msgs = [m["content"] for m in hist if m["role"] == "assistant"]
+        if len(agent_msgs) >= 3 and len(set(agent_msgs)) <= len(agent_msgs) * 0.5:
+            suggestions.append("客服存在重复回复现象，需引入上下文感知和意图识别，根据用户输入动态生成差异化回复")
+            break
+
+    # Coverage gaps
+    req_ratio = coverage.get("requirement_coverage", {}).get("ratio", 0)
+    if req_ratio < 0.5:
+        suggestions.append(f"业务需求覆盖率仅{int(req_ratio*100)}%，需增加针对核心任务目标的验证逻辑，确保合同通知/配送说明/身份确认等关键步骤被测试到")
+
+    risk_ratio = coverage.get("risk_coverage", {}).get("ratio", 0)
+    if risk_ratio < 0.5:
+        suggestions.append(f"风险规则覆盖率仅{int(risk_ratio*100)}%，需补充拒绝型/质疑型/忙碌型用户画像的测试场景")
+
+    # Specific violation patterns
+    rule_ids = set(v.get("rule_id", "") for v in violations)
+    if "no_repeat" in rule_ids:
+        suggestions.append("对重复回复应引入上下文摘要，当用户未给新信息时主动推进下一流程步骤")
+    if "length_limit" in rule_ids:
+        suggestions.append("存在回复超限问题，长信息应拆分为多轮递进式表达")
+
+    if not suggestions:
+        suggestions.append("整体表现合规，建议增加更多边界用户画像（情绪化用户、多轮反复确认用户）进一步验证鲁棒性")
+
+    return suggestions[:5]
+
+
+def _check_requirements_satisfied(dsl: Any, history: list[dict], state_trace: list[dict]) -> list[str]:
+    """Check which atomic requirements are satisfied by matching keywords in dialogue."""
+    satisfied = []
+    all_agent_text = " ".join(m["content"] for m in history if m["role"] == "assistant")
+    all_text = " ".join(m["content"] for m in history)
+    visited_states = set(t.get("new_state", "") for t in state_trace)
+
+    for req in dsl.atomic_requirements:
+        # Check if requirement's bound state was visited
+        if req.bound_to_state and req.bound_to_state in visited_states:
+            satisfied.append(req.id)
+            continue
+        # Check if key terms from requirement description appear in dialogue
+        desc_keywords = [w for w in req.description if len(w) >= 2]
+        desc_text = req.description
+        # Simple heuristic: if 2+ key phrases from description found in agent text
+        key_phrases = [p for p in desc_text.split("、") if len(p) >= 2]
+        if not key_phrases:
+            key_phrases = [desc_text[:8]]
+        matches = sum(1 for phrase in key_phrases if phrase in all_agent_text)
+        if matches >= 1 or desc_text[:6] in all_text:
+            satisfied.append(req.id)
+
+    return satisfied
+
+
+def _has_repeated_agent_reply(history: list[dict]) -> bool:
+    """Check if agent repeatedly uses the same reply (quality issue)."""
+    agent_msgs = [m["content"] for m in history if m["role"] == "assistant"]
+    if len(agent_msgs) < 3:
+        return False
+    unique = set(agent_msgs)
+    return len(unique) <= len(agent_msgs) * 0.5
+
+
+def _build_agent_system_prompt(parsed_task: dict) -> str:
+    """Build a rich system prompt for the simulated agent based on parsed task."""
+    role = parsed_task.get("role", "客服")
+    goal = parsed_task.get("goal", "")
+    max_len = parsed_task.get("max_reply_length", 30) or 30
+    constraints = parsed_task.get("constraints", [])
+    flow_steps = parsed_task.get("flow", [])
+    faq = parsed_task.get("faq", [])
+    forbidden = parsed_task.get("forbidden", [])
+
+    parts = [f"你是{role}，正在进行外呼电话。"]
+    parts.append(f"\n【核心目标】{goal}")
+
+    if flow_steps:
+        flow_text = "\n".join(
+            f"  {i+1}. {s.get('action', s.get('condition', ''))}"
+            for i, s in enumerate(flow_steps[:6])
+        )
+        parts.append(f"\n【任务流程】\n{flow_text}")
+
+    if faq:
+        faq_text = "\n".join(f"  Q: {q.get('question_type','')} → A: {q.get('answer','')[:40]}" for q in faq[:4])
+        parts.append(f"\n【常见问答】\n{faq_text}")
+
+    if constraints:
+        parts.append(f"\n【约束】" + "；".join(constraints[:5]))
+
+    if forbidden:
+        parts.append(f"\n【禁用词】" + "、".join(forbidden[:5]))
+
+    parts.append(f"\n【规则】每次回复1句话，不超过{max_len}字。根据用户反应灵活推进任务，不要重复同一句话。")
+
+    return "\n".join(parts)
 
 
 async def _run_single_scenario(
@@ -636,8 +736,7 @@ async def _run_single_scenario(
         scenario_started = time.time()
         logger.info("scenario started id=%s index=%s max_turns=%s", scenario_id, index, max_turns)
         sim = create_simulator_from_scenario(scenario, llm)
-        sim.llm = None  # Realtime API uses deterministic user fallback to avoid doubling LLM latency.
-        state_tracker = StateTracker(dsl=dsl, llm=None)  # 绾鍒欐ā寮忥細鐪?0%寤惰繜锛岃鍒欏叧閿瘝宸茶鐩栦富瑕佹剰鍥?        checker = AutoCheckerBuilder(parsed_task)
+        state_tracker = StateTracker(dsl=dsl, llm=None)  # Rule-only mode for state tracking
         checker = AutoCheckerBuilder(parsed_task)
 
         history: list[dict[str, str]] = []
@@ -665,11 +764,12 @@ async def _run_single_scenario(
                 "uncertain": update.uncertain,
             })
 
-            # Agent reply
+            # Agent reply — use rich system prompt with task details
+            agent_system = _build_agent_system_prompt(parsed_task)
             agent_msg = await _chat_with_timeout(llm, [
-                {"role": "system", "content": f"你是{parsed_task.get('role','')}。目标:{parsed_task.get('goal','')[:30]}。只输出一句话，不超过{parsed_task.get('max_reply_length',30)}字。"},
-                *history[-6:]
-            ], max_tokens=120, temperature=0.3, timeout_s=4.0, fallback="好的，我这边记录一下。")
+                {"role": "system", "content": agent_system},
+                *history[-8:]
+            ], max_tokens=200, temperature=0.4, timeout_s=6.0, fallback="好的，我已记录，稍后有同事跟进处理。")
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)
@@ -708,13 +808,24 @@ async def _run_single_scenario(
         compliant_turns = sum(1 for r in rule_results_all if r["compliant"])
         total_turns = len(rule_results_all)
 
+        # Check which atomic requirements are satisfied
+        satisfied_reqs = _check_requirements_satisfied(dsl, history, state_trace)
+
+        # Compute meaningful dimension scores
+        visited_states = set(t.get("new_state", "") for t in state_trace)
+        total_states = len([s for s in dsl.states if not s.entry])
+        state_coverage_ratio = len(visited_states) / max(len(dsl.states), 1)
+        req_satisfaction_ratio = len(satisfied_reqs) / max(len(dsl.atomic_requirements), 1)
+        branch_states = {"refusal_exit", "busy_handling", "faq_handling", "handoff_or_escalation"}
+        branches_hit = len(visited_states & branch_states)
+
         dim_scores = {
-            "task_completion": 4 if total_turns >= 3 else 2,
-            "flow_state_adherence": 4 if any(t.get("new_state") != "opening" for t in state_trace) else 2,
-            "constraint_compliance": 5 if compliant_turns == total_turns else 3,
-            "branch_handling": 3,
-            "context_consistency": 4,
-            "communication_experience": 4 if total_turns >= 2 else 3,
+            "task_completion": min(5, max(1, round(req_satisfaction_ratio * 5))),
+            "flow_state_adherence": min(5, max(1, round(state_coverage_ratio * 5))),
+            "constraint_compliance": 5 if compliant_turns == total_turns else max(1, 5 - sum(1 for r in rule_results_all if not r["compliant"])),
+            "branch_handling": min(5, max(1, 1 + branches_hit)),
+            "context_consistency": 4 if total_turns >= 3 and not _has_repeated_agent_reply(history) else 2,
+            "communication_experience": 4 if total_turns >= 3 else 3,
         }
 
         p0_count = sum(1 for v in set(violation_ids) if "p0" in v)
@@ -739,7 +850,7 @@ async def _run_single_scenario(
             "p1_count": p1_count,
             "final_score": final_score,
             "violation_rule_ids": list(set(violation_ids)),
-            "satisfied_requirements": [],
+            "satisfied_requirements": satisfied_reqs,
         }
     except Exception as exc:
         logger.exception("scenario failed id=%s", scenario_id)

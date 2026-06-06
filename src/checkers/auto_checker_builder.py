@@ -23,8 +23,10 @@ class AutoCheckerBuilder:
 
     def _build_rules(self):
         """从配置自动构建所有规则"""
-        # 1. 字数限制（必有）
+        # 1. 字数限制（必有）— 如果解析出0则用合理默认值
         max_len = self.config.get("max_reply_length", 30)
+        if max_len <= 0:
+            max_len = 30
         self.rules.append(DynamicRule(
             name="length_limit",
             description=f"回复不超过{max_len}字",

@@ -538,6 +538,9 @@ _RULE_SUGGESTIONS = {
     "p1_context_loss": "每轮回复前检查历史记录，不重复已回答内容",
     "p1_faq_wrong_fact": "FAQ回答严格以知识库为准，不编造不存在的优惠或规则",
     "p1_no_brief_exit_when_busy": "用户表示忙碌时立即提供简短版（30秒说完）或预约回拨",
+    "no_repeat": "引入上下文摘要机制，禁止连续2轮使用相同话术。当用户未给出新信息时，应主动推进下一流程步骤或提供新角度说明",
+    "length_limit": "控制每轮回复字数在任务约束范围内。长信息拆分为多轮递进式表达，避免一次性输出超长内容",
+    "forbidden_words": "严格避免使用任务禁用词。建立同义替换词表，在生成回复后做最终过滤检查",
 }
 
 
@@ -546,7 +549,18 @@ def _rule_description(rule_id: str) -> str:
 
 
 def _rule_suggestion(rule_id: str) -> str:
-    return _RULE_SUGGESTIONS.get(rule_id, "优化对应话术分支逻辑")
+    if rule_id in _RULE_SUGGESTIONS:
+        return _RULE_SUGGESTIONS[rule_id]
+    # Generate contextual fallback based on rule_id pattern
+    if "repeat" in rule_id:
+        return "避免重复使用相同话术，引入多样化表达和主动推进策略"
+    if "length" in rule_id or "limit" in rule_id:
+        return "控制回复字数在约束范围内，长内容拆分多轮表达"
+    if "forbidden" in rule_id:
+        return "检查并移除禁用词，使用等价替换表述"
+    if "timeout" in rule_id or "silence" in rule_id:
+        return "设置静默超时检测，主动追问或礼貌结束"
+    return f"针对规则 {rule_id} 优化对应话术逻辑，确保在触发场景下有合规分支处理"
 
 
 def _generate_suggestions(

@@ -142,11 +142,16 @@ class InstructionParser:
         # 如果没提取到forbidden，从constraints中尝试提取
         if not parsed["forbidden"]:
             for c in parsed["constraints"]:
-                # 匹配 "不说/不能说/禁止说 X、Y、Z"
-                match = re.search(r'不[说能用使]+["“]?(.+?)["”]?(?:等|$)', c)
+                # 匹配 不说/不能说/禁止说 X Y Z
+                match = re.search(r'不[说能用使]+[""]?(.+?)[""]?(?:等|$)', c)
                 if match:
-                    words = re.split(r'[、，,"“”""]+', match.group(1))
+                    words = re.split(r'[、，,"""]+', match.group(1))
                     parsed["forbidden"].extend([w.strip() for w in words if w.strip()])
+
+        # Ensure max_reply_length is reasonable (never 0)
+        mrl = parsed.get('max_reply_length')
+        if not mrl or mrl <= 0:
+            parsed['max_reply_length'] = 30
 
         return parsed
 
