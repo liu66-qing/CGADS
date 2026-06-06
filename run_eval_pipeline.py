@@ -321,12 +321,13 @@ def run_scenario(
     final_score = compute_final_score(dimension_scores, p0_count, p1_count)
 
     violation_rule_ids = severity_checker.get_violation_rule_ids(severity_violations)
-    # Also include basic constraint checker violations for backward compat
+    # Separate constraint violations (no_repeat, length_limit, etc.) from severity violations
+    constraint_violations = []
     for item in rule_results:
         for violation in item.get("violations", []):
             rule_name = violation.get("rule_name") or violation.get("rule")
             if rule_name and rule_name not in violation_rule_ids:
-                violation_rule_ids.append(rule_name)
+                constraint_violations.append(rule_name)
 
     return {
         "scenario_id": scenario_id,
@@ -346,6 +347,7 @@ def run_scenario(
         "p1_count": p1_count,
         "final_score": final_score,
         "violation_rule_ids": violation_rule_ids,
+        "constraint_violations": list(set(constraint_violations)),
         "severity_violations": [
             {
                 "rule_id": v.rule_id,

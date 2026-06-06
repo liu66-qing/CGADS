@@ -112,7 +112,7 @@ class InstructionParser:
         raise ValueError(f"无法解析LLM输出为JSON，原始输出前200字: {text[:200]}")
 
     def _post_process(self, parsed: dict, raw_instruction: str) -> dict:
-        """后处理：补全缺失字段、修正格式"""
+        """后处理：补全缺失字段、修正格式、确保评测空间充分"""
         # 确保必要字段
         defaults = {
             "task_id": "unknown_task",
@@ -142,7 +142,6 @@ class InstructionParser:
         # 如果没提取到forbidden，从constraints中尝试提取
         if not parsed["forbidden"]:
             for c in parsed["constraints"]:
-                # 匹配 不说/不能说/禁止说 X Y Z
                 match = re.search(r'不[说能用使]+[""]?(.+?)[""]?(?:等|$)', c)
                 if match:
                     words = re.split(r'[、，,"""]+', match.group(1))
@@ -153,7 +152,127 @@ class InstructionParser:
         if not mrl or mrl <= 0:
             parsed['max_reply_length'] = 30
 
+        # 关键：确保flow至少有3步，否则评测空间太小
+        if len(parsed.get("flow", [])) < 3:
+            parsed["flow"] = self._ensure_minimum_flow(parsed, raw_instruction)
+
+        # 关键：从原始指令提取隐含约束
+        if len(parsed.get("constraints", [])) < 2:
+            parsed["constraints"] = self._extract_implicit_constraints(parsed, raw_instruction)
+
+        # 关键：从原始指令提取隐含FAQ
+        if not parsed.get("faq") and len(raw_instruction) > 200:
+            parsed["faq"] = self._extract_implicit_faq(parsed, raw_instruction)
+
         return parsed
+
+    def _ensure_minimum_flow(self, parsed: dict, raw_instruction: str) -> list[dict]:
+        """确保flow至少覆盖外呼核心步骤，避免评测空间过小"""
+        existing = parsed.get("flow", [])
+        goal = parsed.get("goal", "")
+        role = parsed.get("role", "")
+
+        # 从原始指令中提取关键动作词
+        action_patterns = [
+            (r"通知.*?(?:签署|生效|完成|到期)", "通知关键事项"),
+            (r"提醒.*?(?:完成|配送|任务|操作)", "提醒执行任务"),
+            (r"确认.*?(?:身份|信息|意向)", "确认用户身份/意向"),
+            (r"说明.*?(?:规则|要求|条件|流程)", "说明规则要求"),
+            (r"(?:退出|结束).*?(?:规则|条件|方式)", "告知退出方式"),
+        ]
+
+        extracted_actions = []
+        for pattern, label in action_patterns:
+            if re.search(pattern, raw_instruction):
+                extracted_actions.append(label)
+
+        # 构建最小完整流程
+        flow = []
+        if existing:
+            flow.extend(existing)
+
+        # 补充标准外呼流程步骤
+        standard_steps = [
+            {"step_id": "step_opening", "condition": "通话接通", "action": "自我介绍并说明来电目的"},
+            {"step_id": "step_identity", "condition": "用户接听", "action": "确认对方身份"},
+            {"step_id": "step_inform_main", "condition": "身份确认后", "action": goal[:50] if goal else "说明核心任务内容"},
+            {"step_id": "step_confirm", "condition": "信息传达完毕", "action": "确认用户理解并询问意向"},
+            {"step_id": "step_closing", "condition": "用户确认或拒绝", "action": "礼貌结束通话"},
+        ]
+
+        # 如果有提取到的动作，插入到inform和confirm之间
+        if extracted_actions:
+            for i, action in enumerate(extracted_actions[:3]):
+                standard_steps.insert(3 + i, {
+                    "step_id": f"step_detail_{i+1}",
+                    "condition": "用户配合后",
+                    "action": action,
+                })
+
+        # 合并：保留已有步骤，补充缺失
+        existing_actions = set(s.get("action", "")[:10] for s in flow)
+        for step in standard_steps:
+            if step["action"][:10] not in existing_actions:
+                flow.append(step)
+                existing_actions.add(step["action"][:10])
+
+        return flow[:8]
+
+    def _extract_implicit_constraints(self, parsed: dict, raw_instruction: str) -> list[str]:
+        """从原始指令中提取隐含约束"""
+        existing = list(parsed.get("constraints", []))
+
+        # 常见外呼约束模式
+        constraint_patterns = [
+            (r"(\d+)[字个]", "每次回复不超过{0}字"),
+            (r"口语化|自然|像.*?说话", "回复需口语化，适合电话沟通"),
+            (r"不[能得要].*?(承诺|保证|绝对)", "不得作绝对化承诺"),
+            (r"超出.*?(职责|范围|能力)", "超出职责范围的问题需转人工或说明无法处理"),
+            (r"(?:敏感|隐私|身份证|银行卡)", "不索要用户敏感信息"),
+        ]
+
+        for pattern, template in constraint_patterns:
+            match = re.search(pattern, raw_instruction)
+            if match:
+                constraint_text = template.format(match.group(1)) if "{0}" in template else template
+                if constraint_text not in existing:
+                    existing.append(constraint_text)
+
+        # 外呼通用约束（如果原始指令暗示外呼场景）
+        if any(kw in raw_instruction for kw in ["外呼", "电话", "通话", "骑手", "客服"]):
+            universal = [
+                "用户明确拒绝时需礼貌退出",
+                "不诱导用户绕过官方渠道",
+            ]
+            for u in universal:
+                if u not in existing:
+                    existing.append(u)
+
+        return existing
+
+    def _extract_implicit_faq(self, parsed: dict, raw_instruction: str) -> list[dict]:
+        """从原始指令中提取隐含FAQ知识点"""
+        faq = []
+
+        # 匹配知识点模式
+        faq_patterns = [
+            (r"(?:如何|怎么).*?(?:查看|查询|确认|退出|取消)", "question"),
+            (r"(?:什么时候|多久).*?(?:生效|到期|开始|结束)", "question"),
+            (r"(?:最低|最少|至少).*?(?:要求|标准|条件)", "question"),
+        ]
+
+        for pattern, _ in faq_patterns:
+            match = re.search(pattern, raw_instruction)
+            if match:
+                question_text = match.group().strip()
+                # Try to find answer nearby
+                answer_context = raw_instruction[max(0, match.start()-50):match.end()+100]
+                faq.append({
+                    "question_type": question_text[:30],
+                    "answer": answer_context[:60],
+                })
+
+        return faq[:5]
 
     def parse_and_save(self, raw_instruction: str, output_dir: str = None) -> dict:
         """解析并保存到文件"""

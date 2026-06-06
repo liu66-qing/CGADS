@@ -292,14 +292,14 @@ DIMENSION_DISPLAY = {
 # ============================================================
 
 PIPELINE_TIMEOUT_S = 150  # Pipeline must complete within 2.5min
-DIALOGUE_STAGE_TIMEOUT_S = 100  # Dialogue phase cap
+DIALOGUE_STAGE_TIMEOUT_S = 120  # Dialogue phase cap — allow more scenarios
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
-    realtime_budget = min(max(2, request.budget), 8)
-    realtime_max_turns = min(max(3, request.max_turns), 10)
+    realtime_budget = min(max(4, request.budget), 8)
+    realtime_max_turns = min(max(3, request.max_turns), 8)
     realtime_warmup_ratio = min(max(request.warmup_ratio, 0.1), 1.0)
     pipeline_started = time.time()
     started_at = datetime.now()
@@ -847,8 +847,8 @@ async def _run_single_scenario(
             agent_system = _build_agent_system_prompt(parsed_task)
             agent_msg = await _chat_with_timeout(llm, [
                 {"role": "system", "content": agent_system},
-                *history[-8:]
-            ], max_tokens=200, temperature=0.4, timeout_s=6.0, fallback="好的，我已记录，稍后有同事跟进处理。")
+                *history[-6:]
+            ], max_tokens=150, temperature=0.4, timeout_s=5.0, fallback="好的，我已记录，稍后有同事跟进处理。")
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)
@@ -913,6 +913,9 @@ async def _run_single_scenario(
 
         p0_count = sum(1 for v in set(violation_ids) if "p0" in v)
         p1_count = sum(1 for v in set(violation_ids) if "p1" in v)
+        # Separate severity violations from constraint violations
+        severity_violation_ids = [v for v in set(violation_ids) if "p0" in v or "p1" in v]
+        constraint_violation_ids = [v for v in set(violation_ids) if "p0" not in v and "p1" not in v]
         final_score = compute_final_score(dim_scores, p0_count, p1_count)
         logger.info(
             "scenario completed id=%s turns=%s score=%s duration_s=%.2f",
@@ -932,7 +935,8 @@ async def _run_single_scenario(
             "p0_count": p0_count,
             "p1_count": p1_count,
             "final_score": final_score,
-            "violation_rule_ids": list(set(violation_ids)),
+            "violation_rule_ids": severity_violation_ids,
+            "constraint_violations": constraint_violation_ids,
             "satisfied_requirements": satisfied_reqs,
         }
     except Exception as exc:

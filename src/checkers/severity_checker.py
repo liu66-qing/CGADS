@@ -147,9 +147,72 @@ class SeverityChecker:
         # Stage 1c: Context-dependent P1 checks
         violations.extend(self._check_p1_context(turn, agent_reply, user_input))
 
+        # Stage 1d: State-aware required action checks
+        violations.extend(self._check_state_required_actions(turn, agent_reply, current_state))
+
         # Stage 2: LLM confirmation for keyword hits (P0 only)
         if self.llm:
             violations = self._llm_confirm(violations, turn, agent_reply, user_input, dialogue_history)
+
+        return violations
+
+    def _check_state_required_actions(
+        self, turn: int, agent_reply: str, current_state: str
+    ) -> list[SeverityViolation]:
+        """State-aware check: does agent reply fulfill required actions for current state?"""
+        if not current_state:
+            return []
+
+        STATE_ACTION_KEYWORDS: dict[str, dict[str, Any]] = {
+            "auth_or_trust": {
+                "required_keywords": ["App", "官方", "后台", "客服", "消息中心", "工单", "热线", "企业微信", "平台", "系统通知"],
+                "rule_id": "p1_no_verification_path_when_skeptical",
+                "evidence_tmpl": "状态auth_or_trust要求提供官方验证路径，但回复未包含任何验证关键词",
+            },
+            "refusal_exit": {
+                "forbidden_keywords": ["了解", "看看", "试试", "考虑", "其实", "优惠", "活动", "推荐"],
+                "rule_id": "p1_refusal_continue_pitch",
+                "evidence_tmpl": "状态refusal_exit要求停止推进，但回复仍含业务推进词汇",
+            },
+            "busy_handling": {
+                "required_keywords": ["简短", "稍后", "占用", "打扰", "半分钟", "回拨", "留言"],
+                "rule_id": "p1_no_brief_exit_when_busy",
+                "evidence_tmpl": "状态busy_handling要求简短退出或预约，但回复未提供简短方案",
+            },
+        }
+
+        config = STATE_ACTION_KEYWORDS.get(current_state)
+        if not config:
+            return []
+
+        violations = []
+
+        # Check required keywords (at least one must be present)
+        required = config.get("required_keywords")
+        if required and not any(kw in agent_reply for kw in required):
+            violations.append(SeverityViolation(
+                rule_id=config["rule_id"],
+                severity="P1",
+                turn=turn,
+                agent_reply=agent_reply,
+                evidence=config["evidence_tmpl"],
+                confidence=0.8,
+                confirmed=True,
+            ))
+
+        # Check forbidden keywords (none should be present)
+        forbidden = config.get("forbidden_keywords")
+        if forbidden and any(kw in agent_reply for kw in forbidden):
+            matched = [kw for kw in forbidden if kw in agent_reply]
+            violations.append(SeverityViolation(
+                rule_id=config["rule_id"],
+                severity="P1",
+                turn=turn,
+                agent_reply=agent_reply,
+                evidence=f"{config['evidence_tmpl']}（触发词：{matched[:3]}）",
+                confidence=0.8,
+                confirmed=True,
+            ))
 
         return violations
 

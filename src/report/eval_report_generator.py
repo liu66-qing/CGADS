@@ -227,6 +227,18 @@ def generate_eval_report(pipeline_output: dict[str, Any]) -> dict[str, Any]:
                 "dialogue_excerpt": violation_turn_data,
             })
 
+    # Collect constraint-level violations separately (no_repeat, length_limit, etc.)
+    constraint_issues = []
+    for r in valid_results:
+        for cv in r.get("constraint_violations", []):
+            constraint_issues.append({
+                "rule_id": cv,
+                "scenario_id": r.get("scenario_id", ""),
+                "severity": "compliance",
+                "description": _rule_description(cv),
+                "suggestion": _rule_suggestion(cv),
+            })
+
     # ═══ Section 8: 典型失败对话片段 ═══
     failure_dialogues = []
     for r in sorted(valid_results, key=lambda x: x.get("final_score", 100))[:3]:
@@ -259,7 +271,7 @@ def generate_eval_report(pipeline_output: dict[str, Any]) -> dict[str, Any]:
     report = {
         "metadata": {
             "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "system": "橙脉CGADS v1.0",
+            "system": "外呼对话评测系统 v1.0",
             "algorithm": "Coverage-Guided Adaptive Dialogue Simulation",
         },
         "sections": {
@@ -270,6 +282,7 @@ def generate_eval_report(pipeline_output: dict[str, Any]) -> dict[str, Any]:
             "5_key_successes": successes,
             "6_key_failures": failures,
             "7_risk_violations": checkpoints,
+            "7b_constraint_issues": constraint_issues,
             "8_failure_dialogues": failure_dialogues,
             "9_coverage": coverage_info,
             "10_suggestions": suggestions,
