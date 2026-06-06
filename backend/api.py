@@ -347,16 +347,16 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 # SSE Pipeline
 # ============================================================
 
-PIPELINE_TIMEOUT_S = 210  # Pipeline must complete within 3.5min
-DIALOGUE_STAGE_TIMEOUT_S = 160  # Dialogue phase cap
-PER_SCENARIO_TIMEOUT_S = 20  # Hard cap per scenario — 5 turns × 4s/turn + buffer
+PIPELINE_TIMEOUT_S = 270  # Pipeline must complete within ~4.5min
+DIALOGUE_STAGE_TIMEOUT_S = 180  # Dialogue Round1 cap (leave room for Round2)
+PER_SCENARIO_TIMEOUT_S = 30  # Hard cap per scenario — 6 turns × 5s/turn
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
     realtime_budget = min(max(8, request.budget), 12)
-    realtime_max_turns = min(max(3, request.max_turns), 5)
+    realtime_max_turns = min(max(4, request.max_turns), 6)
     realtime_warmup_ratio = min(max(request.warmup_ratio, 0.5), 0.75)
     pipeline_started = time.time()
     started_at = datetime.now()
@@ -1025,17 +1025,24 @@ async def _run_single_scenario(
 
             # Agent reply — use rich system prompt with task details
             agent_system = _build_agent_system_prompt(parsed_task)
-            _fallbacks = [
-                "好的，我帮您确认下合同信息。",
-                "感谢反馈，我记录一下配送要求。",
-                "明白了，合同通知已发至您App。",
-                "收到，稍后有同事回拨确认。",
-                "好的，祝您顺利，再见。",
-            ]
+            # State-aware fallbacks to drive proper slot progression
+            _state_fallbacks = {
+                "opening": "您好，我是美团站长，通知您合同签署的事。",
+                "auth_or_trust": "您可以在App-我的合同里查看官方通知，或拨打客服热线核实。",
+                "inform": "通知您，合同已签署生效，今日需完成配送任务。",
+                "faq_handling": "合同期内每日需完成配送订单，详情可在App查看。",
+                "intent_confirm": "好的，我确认记录一下，您今天可以正常配送对吧？",
+                "busy_handling": "好的，那我稍后再联系您，您忙完回拨也行。",
+                "refusal_exit": "好的，理解您的情况，不打扰了，再见。",
+                "closing": "好的，祝您顺利，再见。",
+                "handoff_or_escalation": "好的，我帮您转接人工客服处理。",
+            }
+            _cur_state = state_tracker.current_state
+            _fallback = _state_fallbacks.get(_cur_state, "好的，我帮您确认下合同信息。")
             agent_msg = await _chat_with_timeout(llm, [
                 {"role": "system", "content": agent_system},
                 *history[-6:]
-            ], max_tokens=100, temperature=0.4, timeout_s=2.0, fallback=_fallbacks[(turn - 1) % len(_fallbacks)])
+            ], max_tokens=120, temperature=0.4, timeout_s=4.0, fallback=_fallback)
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)
