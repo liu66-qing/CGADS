@@ -140,12 +140,17 @@ class StateTracker:
         text = agent_reply or ""
         if any(kw in text for kw in ["我是", "客服", "站长", "平台"]):
             updates.setdefault("identity_disclosed", True)
-        if any(kw in text for kw in ["官方", "App", "工单", "后台", "消息中心"]):
+        if any(kw in text for kw in ["官方", "App", "APP", "工单", "后台", "消息中心", "热线", "站内信"]):
             updates.setdefault("verification_path_provided", True)
-        if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单"]):
+            updates.setdefault("trust_verified", True)
+        if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单", "配送", "完成"]):
             updates.setdefault("benefit_explained", True)
         if any(kw in text for kw in ["再见", "祝您", "辛苦", "打扰了", "顺利"]):
             updates.setdefault("polite_close_attempted", True)
+        if any(kw in text for kw in ["稍后", "再联系", "回拨", "下次"]):
+            updates.setdefault("reschedule_agreed", True)
+        if any(kw in text for kw in ["确认", "记录", "收到", "好的"]):
+            updates.setdefault("intent_recorded", True)
         self._apply_slots(updates)
         return updates
 
@@ -171,15 +176,31 @@ class StateTracker:
         text = (user_input or "").strip()
         if not text:
             return IntentResult(intent="silent_short", confidence=0.8, source="heuristic", rationale="empty_input")
-        if len(text) <= 4:
-            return IntentResult(intent="cooperative", confidence=0.7, source="heuristic", rationale="short_reply")
+        if len(text) <= 3 and text in ("嗯", "哦", "好", "行"):
+            return IntentResult(intent="cooperative", confidence=0.8, source="heuristic", rationale="minimal_ack")
+        # Skeptical/trust challenge
+        if any(w in text for w in ["骗子", "诈骗", "假的", "怎么证明", "你是谁", "不可信", "工单号", "真的假的"]):
+            return IntentResult(intent="skeptical_authenticity", confidence=0.85, source="heuristic", rationale="skeptical_keyword")
+        # Busy
+        if any(w in text for w in ["忙", "没空", "开会", "送餐", "开车", "不方便", "等会"]):
+            return IntentResult(intent="busy", confidence=0.85, source="heuristic", rationale="busy_keyword")
+        # Hard refusal
+        if any(w in text for w in ["别打了", "不要打了", "挂了", "滚", "投诉你"]):
+            return IntentResult(intent="hard_refusal", confidence=0.9, source="heuristic", rationale="hard_refusal")
+        # Soft refusal
+        if any(w in text for w in ["不用", "不需要", "不想", "算了", "不行", "不要", "拒绝", "不感兴趣"]):
+            return IntentResult(intent="refusal", confidence=0.8, source="heuristic", rationale="refusal_keyword")
+        # Off-topic / beyond scope
+        if any(w in text for w in ["工资", "薪资", "投诉", "领导", "转人工", "你们经理"]):
+            return IntentResult(intent="off_topic", confidence=0.8, source="heuristic", rationale="off_topic_keyword")
+        # Questions
         if "？" in text or "?" in text or "吗" in text or "怎么" in text or "什么" in text or "多少" in text:
-            return IntentResult(intent="question", confidence=0.75, source="heuristic", rationale="question_mark_or_interrogative")
-        if any(w in text for w in ["好的", "知道了", "行", "可以", "没问题", "明白", "嗯"]):
+            return IntentResult(intent="question", confidence=0.75, source="heuristic", rationale="question_pattern")
+        # Cooperative
+        if any(w in text for w in ["好的", "知道了", "行", "可以", "没问题", "明白"]):
             return IntentResult(intent="cooperative", confidence=0.8, source="heuristic", rationale="agreement_keyword")
-        if any(w in text for w in ["不行", "不好", "算了", "不用"]):
-            return IntentResult(intent="refusal", confidence=0.7, source="heuristic", rationale="soft_refusal_keyword")
-        # 无法判断时仍走LLM
+        if len(text) <= 4:
+            return IntentResult(intent="cooperative", confidence=0.6, source="heuristic", rationale="short_reply")
         return None
 
     def _rule_intent(self, user_input: str) -> IntentResult | None:
@@ -276,8 +297,15 @@ class StateTracker:
             updates.setdefault("refusal_detected", True)
         if intent.intent == "busy":
             updates["user_busy"] = True
+            updates["reschedule_agreed"] = True
         if prev == "auth_or_trust" and new_state == "inform":
             updates["trust_verified"] = True
+        if intent.intent == "cooperative" and prev == "auth_or_trust":
+            updates["trust_verified"] = True
+        if intent.intent == "cooperative" and prev in ("faq_handling", "inform"):
+            updates["all_questions_answered"] = True
+        if intent.intent == "cooperative" and prev == "intent_confirm":
+            updates["intent_recorded"] = True
         return updates
 
     def _apply_slots(self, updates: dict[str, Any]) -> None:

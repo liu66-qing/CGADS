@@ -251,7 +251,7 @@ class ThreeLayerUserSimulator:
         messages.append({"role": "user", "content": agent_message})
 
         try:
-            reply = self.llm.chat(messages, max_tokens=128, temperature=0.8, timeout=5)
+            reply = self.llm.chat(messages, max_tokens=128, temperature=0.8, timeout=4)
             if not reply or len(reply) > 80:
                 return self._fallback_reply(event)
             return reply.strip()

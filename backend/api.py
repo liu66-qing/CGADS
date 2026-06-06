@@ -316,7 +316,7 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 
 PIPELINE_TIMEOUT_S = 270  # Pipeline must complete within 4.5min
 DIALOGUE_STAGE_TIMEOUT_S = 210  # Dialogue phase cap — allow 6+ scenarios
-PER_SCENARIO_TIMEOUT_S = 35  # Hard cap per scenario — force-terminate if stuck
+PER_SCENARIO_TIMEOUT_S = 28  # Hard cap per scenario — force-terminate if stuck
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
@@ -491,6 +491,8 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     # Gap分析
     gaps = coverage_tracker.uncovered_targets()
     remaining_budget = realtime_budget - len(scenarios_round1)
+    round2_planned = 0
+    round2_executed = 0
     time_remaining = dialogue_deadline - time.time()
 
     if gaps and remaining_budget > 0 and time_remaining > 10:
@@ -501,6 +503,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
         # Round 2: targeted
         gap_scenarios = _risk_first_scenarios(generator.generate_from_coverage_report(gaps))[:remaining_budget]
+        round2_planned = len(gap_scenarios)
         yield sse_event("cgads_round", {
             "round": 2,
             "type": "targeted",
@@ -508,12 +511,14 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             "scenarios": [{"name": s.get("name", ""), "targets": s.get("coverage_targets", [])} for s in gap_scenarios],
         })
 
+        round2_executed = 0
         for idx, scenario in enumerate(gap_scenarios):
             if time.time() > dialogue_deadline and idx >= 2:
                 logger.warning("dialogue gap round timeout after %d gap scenarios", idx)
                 break
             result = await _run_single_scenario(scenario, len(scenarios_round1) + idx, parsed_task, dsl, llm, realtime_max_turns)
             scenario_results.append(result)
+            round2_executed += 1
 
             coverage_tracker.record_scenario(
                 scenario_id=result["scenario_id"],
@@ -556,13 +561,17 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     duration = round(time.time() - t0, 2)
     final_coverage = coverage_tracker.report().to_dict()
     adequacy = not bool(coverage_tracker.uncovered_targets())
+    round2_info = {}
+    if gaps and remaining_budget > 0 and time_remaining > 10:
+        round2_info = {"planned": round2_planned, "executed": round2_executed, "skipped_reason": "timeout" if round2_executed < round2_planned else ""}
 
     yield sse_event("stage_complete", {
         "stage": "dialogue",
         "duration_s": duration,
         "result": {
             "total_scenarios": len(scenario_results),
-            "rounds": 2 if gaps and remaining_budget > 0 and time_remaining > 15 else 1,
+            "rounds": 2 if round2_info else 1,
+            "round2": round2_info,
             "coverage": final_coverage,
             "adequacy": adequacy,
         },
@@ -937,7 +946,7 @@ async def _run_single_scenario(
             agent_msg = await _chat_with_timeout(llm, [
                 {"role": "system", "content": agent_system},
                 *history[-6:]
-            ], max_tokens=150, temperature=0.4, timeout_s=5.0, fallback=_fallbacks[(turn - 1) % len(_fallbacks)])
+            ], max_tokens=150, temperature=0.4, timeout_s=4.0, fallback=_fallbacks[(turn - 1) % len(_fallbacks)])
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)
