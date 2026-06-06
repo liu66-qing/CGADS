@@ -445,6 +445,9 @@ def render_report_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- **问题**：{sug['problem']}")
         lines.append(f"- **建议**：{sug['action']}")
         lines.append(f"- **预期效果**：{sug.get('expected_effect', '提升对应维度评分')}")
+        evidence_ref = sug.get("evidence_ref", "")
+        if evidence_ref:
+            lines.append(f"- **证据来源**：{evidence_ref}")
         lines.append("")
 
     lines.append("---")
@@ -568,60 +571,85 @@ def _generate_suggestions(
     checkpoints: list[dict],
     coverage_info: dict,
 ) -> list[dict[str, str]]:
-    """基于失败模式自动生成优化建议。"""
+    """基于失败模式自动生成业务导向的优化建议。
+
+    每条建议格式：问题现象 → 业务影响 → 具体优化方案 → 预期效果
+    """
     suggestions = []
 
-    # P0类建议
+    # P0类建议 — 直接关联到数字人prompt的具体修改
     p0_rules = set(cp["checkpoint_id"] for cp in checkpoints if cp["severity"] == "P0")
     for rule_id in p0_rules:
+        cp = next((c for c in checkpoints if c["checkpoint_id"] == rule_id), None)
+        evidence_text = cp.get("evidence", "") if cp else ""
         suggestions.append({
             "priority": "P0",
             "title": f"修复{_rule_description(rule_id)}",
-            "problem": f"触发了P0级违规：{_rule_description(rule_id)}",
+            "problem": f"触发P0违规：{_rule_description(rule_id)}。{evidence_text[:80]}",
             "action": _rule_suggestion(rule_id),
             "expected_effect": "消除P0违规，评分上限从30分恢复到满分",
+            "evidence_ref": evidence_text[:120],
         })
 
     # P1类建议
     p1_rules = set(cp["checkpoint_id"] for cp in checkpoints if cp["severity"] == "P1")
     for rule_id in list(p1_rules)[:3]:
+        cp = next((c for c in checkpoints if c["checkpoint_id"] == rule_id), None)
+        evidence_text = cp.get("evidence", "") if cp else ""
         suggestions.append({
             "priority": "P1",
             "title": f"修复{_rule_description(rule_id)}",
-            "problem": f"触发了P1级违规：{_rule_description(rule_id)}",
+            "problem": f"触发P1违规：{_rule_description(rule_id)}。{evidence_text[:80]}",
             "action": _rule_suggestion(rule_id),
             "expected_effect": "消除P1封顶，评分上限恢复",
+            "evidence_ref": evidence_text[:120],
         })
 
-    # 覆盖率建议
+    # 覆盖率建议 — 具体说明哪些业务点没测到
     uncovered = coverage_info.get("uncovered_targets", [])
     if uncovered:
-        edge_gaps = [t for t in uncovered if t.startswith("edge:")]
+        req_gaps = [t for t in uncovered if t.startswith("requirement:")]
         risk_gaps = [t for t in uncovered if t.startswith("risk:")]
+        edge_gaps = [t for t in uncovered if t.startswith("edge:")]
+
+        if req_gaps:
+            suggestions.append({
+                "priority": "P1",
+                "title": "核心业务需求未验证",
+                "problem": f"{len(req_gaps)}项业务需求未被测试到：{', '.join(req_gaps[:3])}",
+                "action": "在模拟中增加配合型用户走完完整流程，确保合同通知、配送说明、身份确认等步骤都被执行到",
+                "expected_effect": "业务需求覆盖率提升，评测结论可信度提高",
+                "evidence_ref": f"未覆盖需求列表：{req_gaps[:5]}",
+            })
+
         if risk_gaps:
             suggestions.append({
                 "priority": "P1",
                 "title": "补充未测试的风险场景",
-                "problem": f"{len(risk_gaps)}条风险规则未被测试到",
-                "action": f"增加针对性用户画像覆盖：{', '.join(risk_gaps[:3])}",
+                "problem": f"{len(risk_gaps)}条风险规则未被触发测试：{', '.join(r.split(':',1)[1] if ':' in r else r for r in risk_gaps[:3])}",
+                "action": "增加拒绝型/质疑型/诱导型用户画像，确保P0/P1规则都有实际对话触发验证",
                 "expected_effect": "风险覆盖率提升至80%+",
+                "evidence_ref": f"未测试风险规则：{risk_gaps[:5]}",
             })
+
         if edge_gaps:
             suggestions.append({
                 "priority": "P2",
                 "title": "补充未覆盖的流程分支",
-                "problem": f"{len(edge_gaps)}条状态转移边未触发",
-                "action": f"增加触发场景：{', '.join(edge_gaps[:3])}",
+                "problem": f"{len(edge_gaps)}条状态转移边未触发：{', '.join(e.split(':',1)[1] if ':' in e else e for e in edge_gaps[:3])}",
+                "action": "增加触发相关场景的用户画像，如忙碌→配合、质疑→信任后继续等",
                 "expected_effect": "边覆盖率提升至60%+",
+                "evidence_ref": f"未触发边：{edge_gaps[:5]}",
             })
 
     if not suggestions:
         suggestions.append({
             "priority": "P2",
-            "title": "持续优化话术自然度",
-            "problem": "无重大违规，可进一步优化用户体验",
-            "action": "优化FAQ回答的口语化程度，减少模板感",
+            "title": "持续优化话术自然度和边界覆盖",
+            "problem": "无重大违规，可进一步优化",
+            "action": "增加情绪化/反复确认/沉默型用户画像验证鲁棒性，优化FAQ回答口语化程度",
             "expected_effect": "沟通体验维度从4提升到5",
+            "evidence_ref": "",
         })
 
     return suggestions

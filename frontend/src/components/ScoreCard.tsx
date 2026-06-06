@@ -28,10 +28,9 @@ export function ScoreCard() {
     <section className="panel score-panel plugin-panel">
       <header className="section-head">
         <div>
-          <h2>结果面板</h2>
-          <p>覆盖、评分和违规证据会在这里汇总。</p>
+          <h2>评测结论</h2>
+          <p>数字人本次评测的综合得分、维度分析和覆盖率</p>
         </div>
-        <span className="next-cue">下一步看：证据时间轴</span>
       </header>
       <div className="score-layout">
         <div className="score-total plugin-card">

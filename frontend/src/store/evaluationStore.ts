@@ -4,7 +4,7 @@ import type { CoverageState, PipelineStage, PipelineStep, ScenarioDialogue, Scor
 const stages: PipelineStep[] = [
   { id: 'parsing', title: '指令解析', subtitle: '提取角色 / 目标 / 约束', status: 'idle' },
   { id: 'dsl_compile', title: 'DSL 编译', subtitle: '任务变状态机', status: 'idle' },
-  { id: 'scenario_gen', title: '场景生成', subtitle: 'CGADS 覆盖补洞', status: 'idle' },
+  { id: 'scenario_gen', title: '场景生成', subtitle: '覆盖引导补测', status: 'idle' },
   { id: 'dialogue', title: '对话模拟', subtitle: '多画像多轮试探', status: 'idle' },
   { id: 'scoring', title: '评测评分', subtitle: '证据链装订', status: 'idle' },
 ]

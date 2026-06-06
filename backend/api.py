@@ -1,4 +1,4 @@
-﻿"""FastAPI SSE backend for realtime CGADS evaluation."""
+"""FastAPI SSE backend for realtime CGADS evaluation."""
 
 from __future__ import annotations
 
@@ -291,6 +291,10 @@ DIMENSION_DISPLAY = {
 # SSE Pipeline
 # ============================================================
 
+PIPELINE_TIMEOUT_S = 150  # Pipeline must complete within 2.5min
+DIALOGUE_STAGE_TIMEOUT_S = 100  # Dialogue phase cap
+
+
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
@@ -403,12 +407,16 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     await asyncio.sleep(0.1)
 
-    yield sse_event("stage_start", {"stage": "dialogue", "label": "瀵硅瘽鎵ц"})
+    yield sse_event("stage_start", {"stage": "dialogue", "label": "对话执行"})
     t0 = time.time()
-    logger.info("dialogue stage started warmup_scenarios=%s", len(scenarios_round1))
+    dialogue_deadline = t0 + DIALOGUE_STAGE_TIMEOUT_S
+    logger.info("dialogue stage started warmup_scenarios=%s deadline_s=%s", len(scenarios_round1), DIALOGUE_STAGE_TIMEOUT_S)
 
     scenario_results = []
     for idx, scenario in enumerate(scenarios_round1):
+        if time.time() > dialogue_deadline:
+            logger.warning("dialogue stage timeout reached after %d scenarios", idx)
+            break
         result = await _run_single_scenario(scenario, idx, parsed_task, dsl, llm, realtime_max_turns)
         scenario_results.append(result)
 
@@ -450,11 +458,12 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             ][:5],
         })
 
-    # Gap鍒嗘瀽
+    # Gap分析
     gaps = coverage_tracker.uncovered_targets()
     remaining_budget = realtime_budget - len(scenarios_round1)
+    time_remaining = dialogue_deadline - time.time()
 
-    if gaps and remaining_budget > 0:
+    if gaps and remaining_budget > 0 and time_remaining > 15:
         yield sse_event("cgads_gaps", {
             "gap_count": len(gaps),
             "gaps": gaps[:10],
@@ -470,6 +479,9 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         })
 
         for idx, scenario in enumerate(gap_scenarios):
+            if time.time() > dialogue_deadline:
+                logger.warning("dialogue gap round timeout after %d gap scenarios", idx)
+                break
             result = await _run_single_scenario(scenario, len(scenarios_round1) + idx, parsed_task, dsl, llm, realtime_max_turns)
             scenario_results.append(result)
 
@@ -520,7 +532,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         "duration_s": duration,
         "result": {
             "total_scenarios": len(scenario_results),
-            "rounds": 2 if gaps and remaining_budget > 0 else 1,
+            "rounds": 2 if gaps and remaining_budget > 0 and time_remaining > 15 else 1,
             "coverage": final_coverage,
             "adequacy": adequacy,
         },
@@ -588,7 +600,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     })
 
     # Final: persist and publish completion.
-    rounds = 2 if gaps and remaining_budget > 0 else 1
+    rounds = 2 if gaps and remaining_budget > 0 and time_remaining > 15 else 1
     output_path = _write_realtime_eval_result(
         parsed_task=parsed_task,
         coverage_report=final_coverage,
@@ -623,38 +635,105 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     })
 
 
-def _generate_pipeline_suggestions(results: list[dict], coverage: dict, violations: list[dict]) -> list[str]:
-    """Generate specific, actionable optimization suggestions based on actual failures."""
+def _generate_pipeline_suggestions(results: list[dict], coverage: dict, violations: list[dict]) -> list[dict[str, str]]:
+    """Generate business-oriented optimization suggestions based on actual evaluation failures.
+
+    Each suggestion maps: 问题现象 → 业务影响 → 具体优化方案
+    """
     suggestions = []
 
-    # Check for repeated agent replies
+    # Analyze dialogue patterns for repeated/low-quality agent behavior
     for r in results:
         hist = r.get("dialogue_history", [])
         agent_msgs = [m["content"] for m in hist if m["role"] == "assistant"]
+        user_msgs = [m["content"] for m in hist if m["role"] == "user"]
+
         if len(agent_msgs) >= 3 and len(set(agent_msgs)) <= len(agent_msgs) * 0.5:
-            suggestions.append("客服存在重复回复现象，需引入上下文感知和意图识别，根据用户输入动态生成差异化回复")
+            suggestions.append({
+                "type": "dialogue_quality",
+                "title": "客服存在重复回复，无法根据用户意图推进对话",
+                "problem": f"场景'{r.get('scenario_id','')}'中客服连续使用相同回复，未识别用户新意图",
+                "action": "在prompt中增加上下文感知指令：'根据用户最新回复判断意图变化，推进到下一流程步骤'。当检测到用户未给新信息时，主动推进（如：身份确认→合同通知→配送说明）",
+                "impact": "任务完成度和沟通体验维度将显著提升"
+            })
             break
 
-    # Coverage gaps
-    req_ratio = coverage.get("requirement_coverage", {}).get("ratio", 0)
-    if req_ratio < 0.5:
-        suggestions.append(f"业务需求覆盖率仅{int(req_ratio*100)}%，需增加针对核心任务目标的验证逻辑，确保合同通知/配送说明/身份确认等关键步骤被测试到")
+    # Check for user-goodbye-but-agent-continues pattern
+    for r in results:
+        hist = r.get("dialogue_history", [])
+        for i, msg in enumerate(hist):
+            if msg["role"] == "user" and any(sig in msg["content"] for sig in ["再见", "挂了", "拜拜"]):
+                if i + 1 < len(hist) and hist[i+1]["role"] == "assistant" and "再见" not in hist[i+1]["content"]:
+                    suggestions.append({
+                        "type": "termination",
+                        "title": "用户表示结束后客服仍继续输出",
+                        "problem": f"场景'{r.get('scenario_id','')}'中用户说'{msg['content']}'后客服仍回复业务内容",
+                        "action": "增加强制结束检测：当用户回复含'再见/挂了/拜拜/别打了'时，立即进入closing状态，只输出礼貌告别语",
+                        "impact": "消除P1结束条件处理错误，提升约束合规分"
+                    })
+                    break
+        if len(suggestions) >= 2:
+            break
 
+    # Business requirement coverage gaps
+    req_ratio = coverage.get("requirement_coverage", {}).get("ratio", 0)
+    req_total = coverage.get("requirement_coverage", {}).get("total", [])
+    req_hit = coverage.get("requirement_coverage", {}).get("hit", [])
+    missed_reqs = [r for r in req_total if r not in req_hit] if isinstance(req_total, list) else []
+
+    if req_ratio < 0.5:
+        action_parts = [f"业务需求覆盖率仅{int(req_ratio*100)}%"]
+        if missed_reqs:
+            action_parts.append(f"未验证的业务点：{', '.join(str(r) for r in missed_reqs[:3])}")
+        action_parts.append("需在prompt中明确要求客服逐步完成所有业务步骤，并在模拟中加入配合型用户让流程走完")
+        suggestions.append({
+            "type": "coverage",
+            "title": "核心业务需求未被测试到",
+            "problem": "\n".join(action_parts[:2]),
+            "action": action_parts[-1],
+            "impact": "业务需求覆盖率提升将直接影响评测充分性判定"
+        })
+
+    # Risk coverage gaps
     risk_ratio = coverage.get("risk_coverage", {}).get("ratio", 0)
     if risk_ratio < 0.5:
-        suggestions.append(f"风险规则覆盖率仅{int(risk_ratio*100)}%，需补充拒绝型/质疑型/忙碌型用户画像的测试场景")
+        suggestions.append({
+            "type": "coverage",
+            "title": "风险场景覆盖不足",
+            "problem": f"风险规则覆盖率{int(risk_ratio*100)}%，多数P0/P1规则未被实际对话触发测试",
+            "action": "补充以下用户画像的模拟场景：明确拒绝型（测试拒绝后是否停止推销）、质疑身份型（测试是否提供官方验证）、诱导承诺型（测试是否使用绝对化表述）",
+            "impact": "风险覆盖率提升至80%+，评测结论可信度大幅提升"
+        })
 
-    # Specific violation patterns
+    # Specific violation patterns → business-level suggestions
     rule_ids = set(v.get("rule_id", "") for v in violations)
     if "no_repeat" in rule_ids:
-        suggestions.append("对重复回复应引入上下文摘要，当用户未给新信息时主动推进下一流程步骤")
-    if "length_limit" in rule_ids:
-        suggestions.append("存在回复超限问题，长信息应拆分为多轮递进式表达")
+        suggestions.append({
+            "type": "violation",
+            "title": "话术重复导致用户体验差",
+            "problem": "客服连续多轮使用相同或近似话术回复",
+            "action": "在数字人prompt中增加规则：'禁止连续2轮使用相同话术。当用户未给出新信息时，主动推进下一流程步骤（如从通知内容转到确认环节）'",
+            "impact": "上下文一致性和沟通体验分提升"
+        })
+    if any("length_limit" in r or "limit" in r for r in rule_ids):
+        suggestions.append({
+            "type": "violation",
+            "title": "回复超出字数限制",
+            "problem": "客服单轮回复超出任务指定字数上限",
+            "action": "将长信息拆分为多轮递进式表达。在prompt中增加硬约束：'每次回复不超过N字，如需说明复杂内容，分多轮逐步说明'",
+            "impact": "消除字数超限违规，约束合规分提升"
+        })
 
     if not suggestions:
-        suggestions.append("整体表现合规，建议增加更多边界用户画像（情绪化用户、多轮反复确认用户）进一步验证鲁棒性")
+        suggestions.append({
+            "type": "general",
+            "title": "整体合规，建议扩大边界测试",
+            "problem": "当前测试范围有限",
+            "action": "增加情绪化用户、多轮反复确认用户、沉默型用户等边界画像，验证数字人在极端场景下的鲁棒性",
+            "impact": "确保上线后面对各类用户都能稳定表现"
+        })
 
-    return suggestions[:5]
+    return suggestions[:6]
 
 
 def _check_requirements_satisfied(dsl: Any, history: list[dict], state_trace: list[dict]) -> list[str]:
@@ -792,7 +871,11 @@ async def _run_single_scenario(
                 ],
             })
 
-            if sim.should_hangup() or state_tracker.current_state in ("refusal_exit", "closing"):
+            # Aggressive termination: detect hangup signals in user reply
+            hangup_signals = ["再见", "先挂了", "拜拜", "挂了", "别打了", "不用了挂了"]
+            user_wants_end = any(sig in user_reply for sig in hangup_signals)
+
+            if sim.should_hangup() or state_tracker.current_state in ("refusal_exit", "closing") or user_wants_end:
                 break
 
             logger.info(
