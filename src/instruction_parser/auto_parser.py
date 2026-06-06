@@ -62,7 +62,7 @@ class InstructionParser:
 
         result = self.llm.chat(
             [{"role": "user", "content": prompt}],
-            max_tokens=4096,
+            max_tokens=2048,
             temperature=0.2,
             timeout=40,
         )
