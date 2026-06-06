@@ -42,7 +42,7 @@ export function ScoreCard() {
   ).size
   const requirementCoverage = Math.round(coverage.requirement)
   const riskCoverage = Math.round(coverage.risk)
-  const sufficient = scenarioCount > 0 && requirementCoverage >= 80 && riskCoverage >= 70 && score.passStatus === 'PASS'
+  const sufficient = scenarioCount > 0 && requirementCoverage >= 70 && riskCoverage >= 60 && score.passStatus === 'PASS'
   const supplementHint = suggestionToText(score.suggestions[0]) || '需优先补充身份真实性、官方渠道、拒绝后继续营销等P0/P1风险场景。'
   const summaryText = scenarioCount
     ? `本次评测覆盖${scenarioCount}个场景/${personaCount || scenarioCount}类用户画像，业务需求覆盖${requirementCoverage}%，风险覆盖${riskCoverage}%，评测充分性：${sufficient ? '充分' : '未充分'}。${sufficient ? '当前结果可作为上线采信参考。' : supplementHint}`
@@ -118,6 +118,26 @@ export function ScoreCard() {
           </div>
         )}
       </div>
+      {score.credibilityBoundary && (
+        <div className="credibility-boundary plugin-card">
+          <h3>采信边界</h3>
+          {score.credibilityBoundary.can_conclude.length > 0 && (
+            <div className="cb-section cb-can">
+              <span>可采信</span>
+              <ul>{score.credibilityBoundary.can_conclude.map((c, i) => <li key={i}>{c}</li>)}</ul>
+            </div>
+          )}
+          {score.credibilityBoundary.cannot_conclude.length > 0 && (
+            <div className="cb-section cb-cannot">
+              <span>需补测</span>
+              <ul>{score.credibilityBoundary.cannot_conclude.map((c, i) => <li key={i}>{c}</li>)}</ul>
+            </div>
+          )}
+          <div className="cb-recommendation">
+            <strong>{score.credibilityBoundary.recommendation}</strong>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

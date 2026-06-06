@@ -268,6 +268,7 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
           violations: data.violations ?? [],
           scenarios: data.scenarios ?? state.score.scenarios,
           suggestions: data.suggestions ?? [],
+          credibilityBoundary: data.credibility_boundary ?? undefined,
         },
       }))
     }

@@ -1954,6 +1954,16 @@ select:focus,
   color: #64748b;
 }
 
+.credibility-boundary { margin-top: 12px; border-top: 1px solid #e4eaf2; padding-top: 12px; }
+.credibility-boundary h3 { font-size: 15px; margin-bottom: 8px; }
+.cb-section { margin-bottom: 8px; }
+.cb-section span { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-bottom: 4px; }
+.cb-can span { background: #dcfae6; color: #067647; }
+.cb-cannot span { background: #fee4e2; color: #b42318; }
+.cb-section ul { margin: 0; padding-left: 18px; font-size: 13px; color: #374151; }
+.cb-section li { margin-bottom: 2px; }
+.cb-recommendation { font-size: 13px; color: #475569; margin-top: 4px; }
+
 .report-markdown table {
   width: 100%;
   border-collapse: collapse;

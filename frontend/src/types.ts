@@ -89,4 +89,11 @@ export interface ScoreState {
   violations: Array<Record<string, unknown>>
   scenarios: ScenarioSummary[]
   suggestions: Array<string | Record<string, unknown>>
+  credibilityBoundary?: {
+    adequate: boolean
+    can_conclude: string[]
+    cannot_conclude: string[]
+    uncovered_impact: Array<{ id: string; impact: string; reason: string }>
+    recommendation: string
+  }
 }
