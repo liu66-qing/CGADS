@@ -28,6 +28,7 @@ export function ScoreCard() {
   const score = useEvaluationStore((s) => s.score)
   const coverage = useEvaluationStore((s) => s.coverage)
   const dialogues = useEvaluationStore((s) => s.dialogues)
+  const running = useEvaluationStore((s) => s.running)
   const data = Object.entries(dimensionMap).map(([key, label]) => ({
     subject: label,
     value: toHundred(score.dimensionScores[key] ?? 0),
@@ -45,7 +46,9 @@ export function ScoreCard() {
   const supplementHint = suggestionToText(score.suggestions[0]) || '需优先补充身份真实性、官方渠道、拒绝后继续营销等P0/P1风险场景。'
   const summaryText = scenarioCount
     ? `本次评测覆盖${scenarioCount}个场景/${personaCount || scenarioCount}类用户画像，业务需求覆盖${requirementCoverage}%，风险覆盖${riskCoverage}%，评测充分性：${sufficient ? '充分' : '未充分'}。${sufficient ? '当前结果可作为上线采信参考。' : supplementHint}`
-    : '本次评测尚未启动，暂无任务要求覆盖、风险覆盖和采信充分性结论。'
+    : running
+      ? '评测进行中，场景正在执行，结论将在完成后自动更新。'
+      : '本次评测尚未启动，暂无任务要求覆盖、风险覆盖和采信充分性结论。'
 
   return (
     <section className="panel score-panel plugin-panel">

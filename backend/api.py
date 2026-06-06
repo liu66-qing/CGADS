@@ -35,6 +35,7 @@ from src.dsl.state_tracker import StateTracker
 from src.evaluators.coverage_driven_scenario_generator import CoverageDrivenScenarioGenerator
 from src.evaluators.three_layer_user_simulator import create_simulator_from_scenario
 from src.checkers.auto_checker_builder import AutoCheckerBuilder
+from src.checkers.severity_checker import SeverityChecker
 from src.evaluators.llm_judge import LLMJudge
 from src.calibration.audit import compute_final_score
 from src.visualization.mermaid_export import export_mermaid_statediagram
@@ -63,7 +64,7 @@ class EvalRequest(BaseModel):
     """单个评测任务请求"""
     instruction: str = Field(..., description="任务指令文本，描述外呼数字人需要完成的完整任务")
     budget: int = Field(12, description="场景预算：总共生成多少个模拟对话场景")
-    warmup_ratio: float = Field(0.35, description="热身轮占比，剩余为定向补测轮")
+    warmup_ratio: float = Field(0.5, description="热身轮占比，剩余为定向补测轮")
     max_turns: int = Field(10, description="每个场景最大对话轮次")
 
 
@@ -313,15 +314,16 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 # SSE Pipeline
 # ============================================================
 
-PIPELINE_TIMEOUT_S = 150  # Pipeline must complete within 2.5min
-DIALOGUE_STAGE_TIMEOUT_S = 120  # Dialogue phase cap — allow more scenarios
+PIPELINE_TIMEOUT_S = 270  # Pipeline must complete within 4.5min
+DIALOGUE_STAGE_TIMEOUT_S = 210  # Dialogue phase cap — allow 6+ scenarios
+PER_SCENARIO_TIMEOUT_S = 35  # Hard cap per scenario — force-terminate if stuck
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
     realtime_budget = min(max(8, request.budget), 12)
-    realtime_max_turns = min(max(3, request.max_turns), 8)
+    realtime_max_turns = min(max(3, request.max_turns), 6)
     realtime_warmup_ratio = min(max(request.warmup_ratio, 0.1), 1.0)
     pipeline_started = time.time()
     started_at = datetime.now()
@@ -436,8 +438,13 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     logger.info("dialogue stage started warmup_scenarios=%s deadline_s=%s", len(scenarios_round1), DIALOGUE_STAGE_TIMEOUT_S)
 
     scenario_results = []
+    MIN_SCENARIOS = 4
+    hard_ceiling = pipeline_started + PIPELINE_TIMEOUT_S - 40
     for idx, scenario in enumerate(scenarios_round1):
-        if time.time() > dialogue_deadline:
+        if time.time() > hard_ceiling:
+            logger.warning("hard pipeline ceiling reached after %d scenarios", idx)
+            break
+        if time.time() > dialogue_deadline and len(scenario_results) >= MIN_SCENARIOS:
             logger.warning("dialogue stage timeout reached after %d scenarios", idx)
             break
         result = await _run_single_scenario(scenario, idx, parsed_task, dsl, llm, realtime_max_turns)
@@ -486,7 +493,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     remaining_budget = realtime_budget - len(scenarios_round1)
     time_remaining = dialogue_deadline - time.time()
 
-    if gaps and remaining_budget > 0 and time_remaining > 15:
+    if gaps and remaining_budget > 0 and time_remaining > 10:
         yield sse_event("cgads_gaps", {
             "gap_count": len(gaps),
             "gaps": gaps[:10],
@@ -502,7 +509,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         })
 
         for idx, scenario in enumerate(gap_scenarios):
-            if time.time() > dialogue_deadline:
+            if time.time() > dialogue_deadline and idx >= 2:
                 logger.warning("dialogue gap round timeout after %d gap scenarios", idx)
                 break
             result = await _run_single_scenario(scenario, len(scenarios_round1) + idx, parsed_task, dsl, llm, realtime_max_turns)
@@ -840,6 +847,7 @@ async def _run_single_scenario(
         sim = create_simulator_from_scenario(scenario, llm)
         state_tracker = StateTracker(dsl=dsl, llm=None)  # Rule-only mode for state tracking
         checker = AutoCheckerBuilder(parsed_task)
+        severity_checker = SeverityChecker(parsed_task, llm=None)
 
         history: list[dict[str, str]] = []
         state_trace = []
@@ -851,6 +859,9 @@ async def _run_single_scenario(
 
         for turn in range(1, max_turns + 1):
             turn_started = time.time()
+            if time.time() - scenario_started > PER_SCENARIO_TIMEOUT_S:
+                logger.warning("per-scenario timeout id=%s after %d turns", scenario_id, turn - 1)
+                break
             user_reply = sim.respond(agent_msg)
             history.append({"role": "user", "content": user_reply})
 
@@ -868,10 +879,17 @@ async def _run_single_scenario(
 
             # Agent reply — use rich system prompt with task details
             agent_system = _build_agent_system_prompt(parsed_task)
+            _fallbacks = [
+                "好的，我了解您的情况。",
+                "感谢您的反馈，我记录一下。",
+                "明白了，我帮您确认下。",
+                "好的，稍等我查看一下。",
+                "收到，我这边处理。",
+            ]
             agent_msg = await _chat_with_timeout(llm, [
                 {"role": "system", "content": agent_system},
                 *history[-6:]
-            ], max_tokens=150, temperature=0.4, timeout_s=5.0, fallback="好的，我已记录，稍后有同事跟进处理。")
+            ], max_tokens=150, temperature=0.4, timeout_s=5.0, fallback=_fallbacks[(turn - 1) % len(_fallbacks)])
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)
@@ -882,21 +900,42 @@ async def _run_single_scenario(
             violations = [r for r in results if not r.passed]
             for v in violations:
                 violation_ids.append(v.rule_name)
+
+            # P0/P1 severity check (state-aware)
+            sev_violations = severity_checker.check_turn(
+                turn=turn, agent_reply=agent_msg, user_input=user_reply,
+                dialogue_history=history, current_state=state_tracker.current_state,
+            )
+            for sv in sev_violations:
+                violation_ids.append(sv.rule_id)
+
+            all_violation_details = [
+                {"rule_name": v.rule_name, "message": v.message}
+                for v in violations
+            ] + [
+                {"rule_name": sv.rule_id, "message": f"[{sv.severity}] {sv.evidence}"}
+                for sv in sev_violations
+            ]
+
             rule_results_all.append({
                 "turn": turn,
-                "compliant": not violations,
+                "compliant": not violations and not sev_violations,
                 "agent_utterance": agent_msg,
                 "user_utterance": user_reply,
                 "state": state_tracker.current_state,
-                "violations": [
-                    {"rule_name": v.rule_name, "message": v.message}
-                    for v in violations
-                ],
+                "violations": all_violation_details,
             })
 
             # Aggressive termination: detect hangup signals in user reply
             hangup_signals = ["再见", "先挂了", "拜拜", "挂了", "别打了", "不用了挂了"]
             user_wants_end = any(sig in user_reply for sig in hangup_signals)
+
+            # Terminate if agent degrades into repetition
+            agent_hist = [m["content"] for m in history if m["role"] == "assistant"]
+            if len(agent_hist) >= 3 and agent_hist[-1] == agent_hist[-2]:
+                logger.warning("agent repeat detected id=%s turn=%s", scenario_id, turn)
+                violation_ids.append("no_repeat")
+                break
 
             if sim.should_hangup() or state_tracker.current_state in ("refusal_exit", "closing") or user_wants_end:
                 break

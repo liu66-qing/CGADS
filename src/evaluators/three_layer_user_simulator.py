@@ -222,6 +222,8 @@ class ThreeLayerUserSimulator:
         return random.choice(candidates)
 
     def _generate_reply(self, agent_message: str, event: BehaviorEvent) -> str:
+        if not self.llm:
+            return self._fallback_reply(event)
         event_guidance = self._event_to_guidance(event)
         system_prompt = f"""你正在扮演接到外呼电话的人。
 
@@ -249,7 +251,7 @@ class ThreeLayerUserSimulator:
         messages.append({"role": "user", "content": agent_message})
 
         try:
-            reply = self.llm.chat(messages, max_tokens=128, temperature=0.8)
+            reply = self.llm.chat(messages, max_tokens=128, temperature=0.8, timeout=5)
             if not reply or len(reply) > 80:
                 return self._fallback_reply(event)
             return reply.strip()
