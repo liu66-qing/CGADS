@@ -21,6 +21,10 @@ const emptyScore: ScoreState = {
 interface EvaluationStore {
   instruction: string
   running: boolean
+  runStartedAt?: number
+  lastEventAt?: number
+  lastEventName?: string
+  eventCount: number
   activeStage: PipelineStage
   pipeline: PipelineStep[]
   coverage: CoverageState
@@ -52,6 +56,17 @@ interface EvaluationStore {
   handleEvent: (event: string, data: any) => void
 }
 
+const eventLabels: Record<string, string> = {
+  stage_start: '阶段开始',
+  stage_complete: '阶段完成',
+  stage_error: '阶段失败',
+  cgads_round: '生成测试轮次',
+  cgads_gaps: '发现覆盖缺口',
+  coverage_update: '覆盖率更新',
+  scenario_complete: '场景完成',
+  pipeline_complete: '评测完成',
+}
+
 const normalizeStage = (stage: string): PipelineStage => {
   if (stage === 'dsl') return 'dsl_compile'
   if (stage === 'scenario') return 'scenario_gen'
@@ -70,6 +85,10 @@ const pct = (value: unknown) => {
 export const useEvaluationStore = create<EvaluationStore>((set) => ({
   instruction: '',
   running: false,
+  runStartedAt: undefined,
+  lastEventAt: undefined,
+  lastEventName: undefined,
+  eventCount: 0,
   activeStage: 'parsing',
   pipeline: stages,
   coverage: { state: 0, edge: 0, risk: 0, requirement: 0 },
@@ -108,6 +127,10 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
   resetRun: () =>
     set({
       running: true,
+      runStartedAt: Date.now(),
+      lastEventAt: Date.now(),
+      lastEventName: '请求已发起',
+      eventCount: 0,
       activeStage: 'parsing',
       pipeline: stages.map((s) => ({ ...s, status: 'idle', duration: undefined, result: undefined, error: undefined })),
       coverage: { state: 0, edge: 0, risk: 0, requirement: 0 },
@@ -124,6 +147,11 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
       reportJson: undefined,
     }),
   handleEvent: (event, data) => {
+    set((state) => ({
+      lastEventAt: Date.now(),
+      lastEventName: eventLabels[event] ?? event,
+      eventCount: state.eventCount + 1,
+    }))
     const stage = normalizeStage(data?.stage)
     if (event === 'stage_start') {
       set((state) => ({ activeStage: stage, pipeline: setStep(state.pipeline, stage, 'running') }))
