@@ -322,16 +322,16 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 # SSE Pipeline
 # ============================================================
 
-PIPELINE_TIMEOUT_S = 330  # Pipeline must complete within 5.5min
-DIALOGUE_STAGE_TIMEOUT_S = 290  # Dialogue phase cap — allow full 2 rounds
-PER_SCENARIO_TIMEOUT_S = 32  # Hard cap per scenario — 5 turns × 6s/turn + buffer
+PIPELINE_TIMEOUT_S = 180  # Pipeline must complete within 3min
+DIALOGUE_STAGE_TIMEOUT_S = 150  # Dialogue phase cap
+PER_SCENARIO_TIMEOUT_S = 20  # Hard cap per scenario — 5 turns × 4s/turn + buffer
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
     realtime_budget = min(max(8, request.budget), 12)
-    realtime_max_turns = min(max(3, request.max_turns), 6)
+    realtime_max_turns = min(max(3, request.max_turns), 5)
     realtime_warmup_ratio = min(max(request.warmup_ratio, 0.5), 0.75)
     pipeline_started = time.time()
     started_at = datetime.now()
@@ -956,6 +956,22 @@ async def _run_single_scenario(
             user_reply = sim.respond(agent_msg)
             history.append({"role": "user", "content": user_reply})
 
+            # Early termination: if user signals hangup, do NOT generate another agent reply
+            hangup_signals = ["再见", "先挂了", "拜拜", "挂了", "别打了", "不用了挂了", "先这样", "不说了"]
+            user_wants_end = any(sig in user_reply for sig in hangup_signals)
+            if (sim.should_hangup() or user_wants_end) and turn >= 2:
+                state_trace.append({
+                    "turn": turn,
+                    "prev_state": state_tracker.current_state,
+                    "new_state": state_tracker.current_state,
+                    "intent": "hangup",
+                    "intent_confidence": 0.95,
+                    "intent_source": "rule",
+                    "transition": None,
+                    "uncertain": False,
+                })
+                break
+
             update = state_tracker.step(turn=turn, user_input=user_reply, agent_history=history)
             state_trace.append({
                 "turn": turn,
@@ -980,7 +996,7 @@ async def _run_single_scenario(
             agent_msg = await _chat_with_timeout(llm, [
                 {"role": "system", "content": agent_system},
                 *history[-6:]
-            ], max_tokens=150, temperature=0.4, timeout_s=3.0, fallback=_fallbacks[(turn - 1) % len(_fallbacks)])
+            ], max_tokens=100, temperature=0.4, timeout_s=2.0, fallback=_fallbacks[(turn - 1) % len(_fallbacks)])
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)
@@ -1017,10 +1033,6 @@ async def _run_single_scenario(
                 "violations": all_violation_details,
             })
 
-            # Aggressive termination: detect hangup signals in user reply
-            hangup_signals = ["再见", "先挂了", "拜拜", "挂了", "别打了", "不用了挂了"]
-            user_wants_end = any(sig in user_reply for sig in hangup_signals)
-
             # Terminate if agent degrades into repetition
             agent_hist = [m["content"] for m in history if m["role"] == "assistant"]
             if len(agent_hist) >= 3 and agent_hist[-1] == agent_hist[-2]:
@@ -1028,11 +1040,9 @@ async def _run_single_scenario(
                 violation_ids.append("no_repeat")
                 break
 
-            # Only terminate on terminal state after minimum depth reached
+            # Terminal state exit after minimum depth
             in_terminal = state_tracker.current_state in ("refusal_exit", "closing", "handoff_or_escalation")
-            if (sim.should_hangup() or user_wants_end) and turn >= 3:
-                break
-            if in_terminal and turn >= 4:
+            if in_terminal and turn >= 3:
                 break
 
             logger.info(
