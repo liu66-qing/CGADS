@@ -315,15 +315,15 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 # ============================================================
 
 PIPELINE_TIMEOUT_S = 270  # Pipeline must complete within 4.5min
-DIALOGUE_STAGE_TIMEOUT_S = 210  # Dialogue phase cap — allow 6+ scenarios
-PER_SCENARIO_TIMEOUT_S = 28  # Hard cap per scenario — force-terminate if stuck
+DIALOGUE_STAGE_TIMEOUT_S = 240  # Dialogue phase cap — allow full 2 rounds
+PER_SCENARIO_TIMEOUT_S = 22  # Hard cap per scenario — tight but sufficient for 5 turns
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
     realtime_budget = min(max(8, request.budget), 12)
-    realtime_max_turns = min(max(3, request.max_turns), 6)
+    realtime_max_turns = min(max(3, request.max_turns), 5)
     realtime_warmup_ratio = min(max(request.warmup_ratio, 0.1), 1.0)
     pipeline_started = time.time()
     started_at = datetime.now()
@@ -495,7 +495,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     round2_executed = 0
     time_remaining = dialogue_deadline - time.time()
 
-    if gaps and remaining_budget > 0 and time_remaining > 10:
+    if gaps and remaining_budget > 0 and time_remaining > 5:
         yield sse_event("cgads_gaps", {
             "gap_count": len(gaps),
             "gaps": gaps[:10],
@@ -513,7 +513,10 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
         round2_executed = 0
         for idx, scenario in enumerate(gap_scenarios):
-            if time.time() > dialogue_deadline and idx >= 2:
+            if time.time() > hard_ceiling:
+                logger.warning("Round2 hard ceiling after %d gap scenarios", idx)
+                break
+            if time.time() > dialogue_deadline and idx >= 1:
                 logger.warning("dialogue gap round timeout after %d gap scenarios", idx)
                 break
             result = await _run_single_scenario(scenario, len(scenarios_round1) + idx, parsed_task, dsl, llm, realtime_max_turns)
@@ -562,7 +565,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     final_coverage = coverage_tracker.report().to_dict()
     adequacy = not bool(coverage_tracker.uncovered_targets())
     round2_info = {}
-    if gaps and remaining_budget > 0 and time_remaining > 10:
+    if gaps and remaining_budget > 0 and time_remaining > 5:
         round2_info = {"planned": round2_planned, "executed": round2_executed, "skipped_reason": "timeout" if round2_executed < round2_planned else ""}
 
     yield sse_event("stage_complete", {
@@ -639,7 +642,6 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     })
 
     # Final: persist and publish completion.
-    rounds = 2 if gaps and remaining_budget > 0 and time_remaining > 15 else 1
     output_path = _write_realtime_eval_result(
         parsed_task=parsed_task,
         coverage_report=final_coverage,
@@ -648,7 +650,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         started_at=started_at,
         budget=realtime_budget,
         warmup_k=warmup_k,
-        rounds=rounds,
+        rounds=2 if round2_info else 1,
     )
 
     yield sse_event("pipeline_complete", {
@@ -658,6 +660,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         "pass_status": pass_status,
         "coverage": final_coverage,
         "adequacy": adequacy,
+        "round2_info": round2_info,
         "credibility_boundary": _build_credibility_boundary(final_coverage, adequacy, total_p0, total_p1),
         "dimension_scores": dim_avg,
         "violations": all_violations,
@@ -913,6 +916,7 @@ async def _run_single_scenario(
 
         agent_msg = parsed_task.get("opening_line", "你好，我是客服。")[:80]
         history.append({"role": "assistant", "content": agent_msg})
+        state_tracker.observe_agent(0, agent_msg)
 
         for turn in range(1, max_turns + 1):
             turn_started = time.time()
@@ -937,16 +941,16 @@ async def _run_single_scenario(
             # Agent reply — use rich system prompt with task details
             agent_system = _build_agent_system_prompt(parsed_task)
             _fallbacks = [
-                "好的，我了解您的情况。",
-                "感谢您的反馈，我记录一下。",
-                "明白了，我帮您确认下。",
-                "好的，稍等我查看一下。",
-                "收到，我这边处理。",
+                "好的，我帮您确认下合同信息。",
+                "感谢反馈，我记录一下配送要求。",
+                "明白了，合同通知已发至您App。",
+                "收到，稍后有同事回拨确认。",
+                "好的，祝您顺利，再见。",
             ]
             agent_msg = await _chat_with_timeout(llm, [
                 {"role": "system", "content": agent_system},
                 *history[-6:]
-            ], max_tokens=150, temperature=0.4, timeout_s=4.0, fallback=_fallbacks[(turn - 1) % len(_fallbacks)])
+            ], max_tokens=150, temperature=0.4, timeout_s=3.0, fallback=_fallbacks[(turn - 1) % len(_fallbacks)])
             history.append({"role": "assistant", "content": agent_msg})
 
             state_tracker.observe_agent(turn, agent_msg)

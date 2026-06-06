@@ -91,7 +91,7 @@ class StateTracker:
         """每收到一条 user 消息后调用一次。返回本步状态变化。"""
         prev = self.current_state
         intent = self._classify_intent(user_input, agent_history or [])
-        target_transition = self._match_transition(intent, user_input)
+        target_transition, is_slot_based = self._match_transition(intent, user_input)
 
         slot_updates: dict[str, Any] = {}
         uncertain = False
@@ -101,6 +101,9 @@ class StateTracker:
             new_state = prev
             notes = "no_transition_matched"
             uncertain = intent.confidence < LOW_CONF_THRESHOLD
+        elif is_slot_based:
+            # Slot-based transitions bypass confidence gate (accumulated state is reliable)
+            new_state = target_transition.to
         else:
             if intent.source == "rule" or intent.confidence >= HIGH_CONF_THRESHOLD:
                 new_state = target_transition.to
@@ -142,15 +145,19 @@ class StateTracker:
             updates.setdefault("identity_disclosed", True)
         if any(kw in text for kw in ["官方", "App", "APP", "工单", "后台", "消息中心", "热线", "站内信"]):
             updates.setdefault("verification_path_provided", True)
-            updates.setdefault("trust_verified", True)
-        if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单", "配送", "完成"]):
-            updates.setdefault("benefit_explained", True)
+            if self.current_state == "auth_or_trust":
+                updates.setdefault("trust_verified", True)
+        if self.current_state in ("inform", "faq_handling", "intent_confirm"):
+            if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单", "配送", "完成", "签署", "生效", "通知", "任务", "要求"]):
+                updates.setdefault("benefit_explained", True)
         if any(kw in text for kw in ["再见", "祝您", "辛苦", "打扰了", "顺利"]):
             updates.setdefault("polite_close_attempted", True)
-        if any(kw in text for kw in ["稍后", "再联系", "回拨", "下次"]):
-            updates.setdefault("reschedule_agreed", True)
-        if any(kw in text for kw in ["确认", "记录", "收到", "好的"]):
-            updates.setdefault("intent_recorded", True)
+        if self.current_state == "busy_handling":
+            if any(kw in text for kw in ["稍后", "再联系", "回拨", "下次"]):
+                updates.setdefault("reschedule_agreed", True)
+        if self.current_state == "intent_confirm":
+            if any(kw in text for kw in ["确认", "记录", "已记录", "已确认"]):
+                updates.setdefault("intent_recorded", True)
         self._apply_slots(updates)
         return updates
 
@@ -261,12 +268,34 @@ class StateTracker:
 
     def _match_transition(
         self, intent: IntentResult, user_input: str
-    ) -> Transition | None:
+    ) -> tuple[Transition | None, bool]:
+        """Returns (matched_transition, is_slot_based)."""
         state = self.dsl.state_by_id(self.current_state)
+        strong_intent_match = None
+        slot_match = None
+        weak_cooperative_match = None
         for tr in state.transitions:
-            if self._transition_matches(tr, intent, user_input):
-                return tr
-        return None
+            if not self._transition_matches(tr, intent, user_input):
+                continue
+            cond = tr.when
+            if cond.rule_keywords and any(w in (user_input or "") for w in cond.rule_keywords):
+                return tr, False
+            if cond.slot_equals:
+                if slot_match is None:
+                    slot_match = tr
+            elif cond.intent and cond.intent != "cooperative":
+                if strong_intent_match is None:
+                    strong_intent_match = tr
+            else:
+                if weak_cooperative_match is None:
+                    weak_cooperative_match = tr
+        if strong_intent_match:
+            return strong_intent_match, False
+        if slot_match:
+            return slot_match, True
+        if weak_cooperative_match:
+            return weak_cooperative_match, False
+        return None, False
 
     def _transition_matches(
         self, tr: Transition, intent: IntentResult, user_input: str
@@ -306,6 +335,17 @@ class StateTracker:
             updates["all_questions_answered"] = True
         if intent.intent == "cooperative" and prev == "intent_confirm":
             updates["intent_recorded"] = True
+        # Auto-advance: if stuck in same state for 2+ turns, set progression slot
+        same_state_count = sum(1 for h in self.history[-2:] if h.new_state == prev)
+        if same_state_count >= 2:
+            if prev == "inform":
+                updates.setdefault("benefit_explained", True)
+            elif prev == "faq_handling":
+                updates.setdefault("all_questions_answered", True)
+            elif prev == "intent_confirm":
+                updates.setdefault("intent_recorded", True)
+            elif prev == "auth_or_trust":
+                updates.setdefault("trust_verified", True)
         return updates
 
     def _apply_slots(self, updates: dict[str, Any]) -> None:

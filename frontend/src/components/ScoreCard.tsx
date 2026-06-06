@@ -121,6 +121,12 @@ export function ScoreCard() {
       {score.credibilityBoundary && (
         <div className="credibility-boundary plugin-card">
           <h3>采信边界</h3>
+          {score.round2Info && score.round2Info.skipped_reason && (
+            <div className="cb-section cb-info">
+              <span>补测执行</span>
+              <p>Round2 计划 {score.round2Info.planned} 场景，实际执行 {score.round2Info.executed} 场景（{score.round2Info.skipped_reason === 'timeout' ? '超时截断' : score.round2Info.skipped_reason}）</p>
+            </div>
+          )}
           {score.credibilityBoundary.can_conclude.length > 0 && (
             <div className="cb-section cb-can">
               <span>可采信</span>

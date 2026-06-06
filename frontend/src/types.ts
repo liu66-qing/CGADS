@@ -96,4 +96,9 @@ export interface ScoreState {
     uncovered_impact: Array<{ id: string; impact: string; reason: string }>
     recommendation: string
   }
+  round2Info?: {
+    planned: number
+    executed: number
+    skipped_reason: string
+  }
 }
