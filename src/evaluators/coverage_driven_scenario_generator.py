@@ -32,7 +32,7 @@ REFUSAL_TEMPLATE = {
     "persona": "你是{role_target}，接到{role_caller}电话，但你{refusal_reason}",
     "behavior": "你开场或第2轮明确拒绝，态度坚定但礼貌",
     "intent_distribution": {"refusal": 0.6, "hard_refusal": 0.3, "cooperative": 0.1},
-    "stop_after_turns": 2,
+    "stop_after_turns": 4,
     "coverage_targets": ["edge:opening->refusal_exit", "risk:p1_refusal_continue_pitch"],
 }
 

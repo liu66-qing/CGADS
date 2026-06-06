@@ -148,7 +148,10 @@ class StateTracker:
             if self.current_state == "auth_or_trust":
                 updates.setdefault("trust_verified", True)
         if self.current_state in ("inform", "faq_handling", "intent_confirm"):
-            if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单", "配送", "完成", "签署", "生效", "通知", "任务", "要求"]):
+            turns_in_inform = sum(1 for h in self.history if h.new_state == "inform")
+            if turns_in_inform >= 2 or self.current_state != "inform":
+                if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单", "配送", "完成", "签署", "生效", "通知", "任务", "要求"]):
+                    updates.setdefault("benefit_explained", True)
                 updates.setdefault("benefit_explained", True)
         if any(kw in text for kw in ["再见", "祝您", "辛苦", "打扰了", "顺利"]):
             updates.setdefault("polite_close_attempted", True)
@@ -335,9 +338,9 @@ class StateTracker:
             updates["all_questions_answered"] = True
         if intent.intent == "cooperative" and prev == "intent_confirm":
             updates["intent_recorded"] = True
-        # Auto-advance: if stuck in same state for 2+ turns, set progression slot
-        same_state_count = sum(1 for h in self.history[-2:] if h.new_state == prev)
-        if same_state_count >= 2:
+        # Auto-advance: if stuck in same state for 3+ turns, set progression slot
+        same_state_count = sum(1 for h in self.history[-3:] if h.new_state == prev)
+        if same_state_count >= 3:
             if prev == "inform":
                 updates.setdefault("benefit_explained", True)
             elif prev == "faq_handling":

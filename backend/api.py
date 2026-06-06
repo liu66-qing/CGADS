@@ -815,13 +815,24 @@ def _generate_pipeline_suggestions(results: list[dict], coverage: dict, violatio
         })
 
     if not suggestions:
-        suggestions.append({
-            "type": "general",
-            "title": "整体合规，建议扩大边界测试",
-            "problem": "当前测试范围有限",
-            "action": "增加情绪化用户、多轮反复确认用户、沉默型用户等边界画像，验证数字人在极端场景下的鲁棒性",
-            "impact": "确保上线后面对各类用户都能稳定表现"
-        })
+        edge_ratio = coverage.get("transition_coverage", {}).get("ratio", 0)
+        risk_ratio = coverage.get("risk_coverage", {}).get("ratio", 0)
+        if edge_ratio < 0.5 or risk_ratio < 0.7:
+            suggestions.append({
+                "type": "general",
+                "title": "评测覆盖不足，未达上线标准",
+                "problem": f"边覆盖 {edge_ratio:.0%}、风险覆盖 {risk_ratio:.0%}，流程路径和风险规则均未充分验证",
+                "action": "补充更多用户画像场景（忙碌→配合、质疑→接受、多轮追问等），确保关键流程路径和 P0/P1 规则至少覆盖 70%",
+                "impact": "当前评测结论仅供参考，不可直接作为上线判定依据"
+            })
+        else:
+            suggestions.append({
+                "type": "general",
+                "title": "评测基本充分，建议扩大边界测试",
+                "problem": "当前核心路径和风险规则已覆盖，但极端场景仍有盲区",
+                "action": "增加情绪化用户、多轮反复确认用户、沉默型用户等边界画像，验证数字人在极端场景下的鲁棒性",
+                "impact": "确保上线后面对各类用户都能稳定表现"
+            })
 
     return suggestions[:6]
 
@@ -998,7 +1009,11 @@ async def _run_single_scenario(
                 violation_ids.append("no_repeat")
                 break
 
-            if sim.should_hangup() or state_tracker.current_state in ("refusal_exit", "closing") or user_wants_end:
+            # Only terminate on terminal state after minimum depth reached
+            in_terminal = state_tracker.current_state in ("refusal_exit", "closing", "handoff_or_escalation")
+            if (sim.should_hangup() or user_wants_end) and turn >= 2:
+                break
+            if in_terminal and turn >= 3:
                 break
 
             logger.info(
