@@ -215,7 +215,7 @@ async def _chat_with_timeout(
 async def _parse_instruction_with_timeout(
     llm: DeepSeekClient,
     instruction: str,
-    timeout_s: float = 45.0,
+    timeout_s: float = 30.0,
 ) -> dict[str, Any]:
     """Run instruction parsing off the event loop with a bounded wait. Retries once on failure."""
     parser = InstructionParser(llm)
@@ -228,7 +228,7 @@ async def _parse_instruction_with_timeout(
         except (asyncio.TimeoutError, Exception) as exc:
             if attempt == 0:
                 logger.warning("parsing attempt 1 failed (%s), retrying...", exc.__class__.__name__)
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
                 continue
             raise
 
@@ -572,7 +572,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     final_coverage = coverage_tracker.report().to_dict()
     adequacy = not bool(coverage_tracker.uncovered_targets())
     round2_info = {}
-    if gaps and remaining_budget > 0 and time_remaining > 5:
+    if round2_planned > 0:
         round2_info = {"planned": round2_planned, "executed": round2_executed, "skipped_reason": "timeout" if round2_executed < round2_planned else ""}
 
     yield sse_event("stage_complete", {
@@ -844,6 +844,18 @@ def _generate_pipeline_suggestions(results: list[dict], coverage: dict, violatio
     return suggestions[:6]
 
 
+_TEMPLATE_DEFAULTS = {
+    "rider_name": "王师傅", "member_name": "张先生", "name": "李先生",
+    "expire_date": "6月30日", "X": "8", "Y": "5", "Z": "22", "W": "7",
+}
+
+
+def _fill_template_vars(text: str) -> str:
+    """Replace ${xxx} placeholders with sensible defaults."""
+    import re
+    return re.sub(r'\$\{(\w+)\}', lambda m: _TEMPLATE_DEFAULTS.get(m.group(1), m.group(1)), text or "")
+
+
 def _check_requirements_satisfied(dsl: Any, history: list[dict], state_trace: list[dict]) -> list[str]:
     """Check which atomic requirements are satisfied by matching keywords in dialogue."""
     satisfied = []
@@ -932,7 +944,7 @@ async def _run_single_scenario(
         rule_results_all = []
         violation_ids = []
 
-        agent_msg = parsed_task.get("opening_line", "你好，我是客服。")[:80]
+        agent_msg = _fill_template_vars(parsed_task.get("opening_line", "你好，我是客服。"))[:80]
         history.append({"role": "assistant", "content": agent_msg})
         state_tracker.observe_agent(0, agent_msg)
 
