@@ -88,5 +88,5 @@ export interface ScoreState {
   dimensionScores: Record<string, number>
   violations: Array<Record<string, unknown>>
   scenarios: ScenarioSummary[]
-  suggestions: string[]
+  suggestions: Array<string | Record<string, unknown>>
 }

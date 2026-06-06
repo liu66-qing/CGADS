@@ -62,8 +62,8 @@ _frontend_dist = PROJECT_ROOT / "frontend" / "dist"
 class EvalRequest(BaseModel):
     """单个评测任务请求"""
     instruction: str = Field(..., description="任务指令文本，描述外呼数字人需要完成的完整任务")
-    budget: int = Field(8, description="场景预算：总共生成多少个模拟对话场景")
-    warmup_ratio: float = Field(0.5, description="热身轮占比，剩余为定向补测轮")
+    budget: int = Field(12, description="场景预算：总共生成多少个模拟对话场景")
+    warmup_ratio: float = Field(0.35, description="热身轮占比，剩余为定向补测轮")
     max_turns: int = Field(10, description="每个场景最大对话轮次")
 
 
@@ -287,6 +287,28 @@ DIMENSION_DISPLAY = {
 }
 
 
+def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Put P0/P1 and adversarial scenarios first so realtime runs cover business risk."""
+    def priority(scenario: dict[str, Any]) -> tuple[int, str]:
+        targets = [str(t) for t in scenario.get("coverage_targets", [])]
+        text = " ".join([scenario.get("name", ""), scenario.get("behavior", ""), *targets])
+        if any(t.startswith("risk:p0") for t in targets):
+            return (0, text)
+        if any(t.startswith("risk:p1") for t in targets):
+            return (1, text)
+        if any(t.startswith("risk:") for t in targets):
+            return (2, text)
+        if any(word in text for word in ["质疑", "拒绝", "忙碌", "诱导", "超职责", "打断"]):
+            return (3, text)
+        if any(t.startswith("edge:") for t in targets):
+            return (4, text)
+        if any(t.startswith("requirement:") for t in targets):
+            return (5, text)
+        return (6, text)
+
+    return sorted(scenarios, key=priority)
+
+
 # ============================================================
 # SSE Pipeline
 # ============================================================
@@ -298,7 +320,7 @@ DIALOGUE_STAGE_TIMEOUT_S = 120  # Dialogue phase cap — allow more scenarios
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
-    realtime_budget = min(max(4, request.budget), 8)
+    realtime_budget = min(max(8, request.budget), 12)
     realtime_max_turns = min(max(3, request.max_turns), 8)
     realtime_warmup_ratio = min(max(request.warmup_ratio, 0.1), 1.0)
     pipeline_started = time.time()
@@ -387,6 +409,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     warmup_k = min(realtime_budget, max(1, int(realtime_budget * realtime_warmup_ratio)))
 
     all_scenarios = generator.generate_base()
+    all_scenarios = _risk_first_scenarios(all_scenarios)
     scenarios_round1 = all_scenarios[:warmup_k]
 
     yield sse_event("cgads_round", {
@@ -470,7 +493,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         })
 
         # Round 2: targeted
-        gap_scenarios = generator.generate_from_coverage_report(gaps)[:remaining_budget]
+        gap_scenarios = _risk_first_scenarios(generator.generate_from_coverage_report(gaps))[:remaining_budget]
         yield sse_event("cgads_round", {
             "round": 2,
             "type": "targeted",

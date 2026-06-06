@@ -14,6 +14,15 @@ const dimensionMap: Record<string, string> = {
 }
 
 const toHundred = (value: number) => (value <= 5 ? value * 20 : value)
+const suggestionToText = (suggestion: unknown) => {
+  if (!suggestion) return ''
+  if (typeof suggestion === 'string') return suggestion
+  if (typeof suggestion !== 'object') return String(suggestion)
+  const item = suggestion as Record<string, unknown>
+  return [item.title, item.problem, item.action]
+    .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    .join('：')
+}
 
 export function ScoreCard() {
   const score = useEvaluationStore((s) => s.score)
@@ -31,11 +40,12 @@ export function ScoreCard() {
       .filter((persona): persona is string => Boolean(persona)),
   ).size
   const requirementCoverage = Math.round(coverage.requirement)
-  const sufficient = scenarioCount > 0 && requirementCoverage >= 80 && score.passStatus === 'PASS'
-  const supplementHint = score.suggestions[0] ?? '需补充拒绝型/忙碌型用户验证。'
+  const riskCoverage = Math.round(coverage.risk)
+  const sufficient = scenarioCount > 0 && requirementCoverage >= 80 && riskCoverage >= 70 && score.passStatus === 'PASS'
+  const supplementHint = suggestionToText(score.suggestions[0]) || '需优先补充身份真实性、官方渠道、拒绝后继续营销等P0/P1风险场景。'
   const summaryText = scenarioCount
-    ? `本次评测覆盖${scenarioCount}个场景/${personaCount || scenarioCount}类用户画像，业务需求覆盖${requirementCoverage}%，评测充分性：${sufficient ? '充分' : '未充分'}。${sufficient ? '当前结果可作为上线采信参考。' : supplementHint}`
-    : '本次评测尚未启动，暂无任务要求覆盖、未覆盖项和采信充分性结论。'
+    ? `本次评测覆盖${scenarioCount}个场景/${personaCount || scenarioCount}类用户画像，业务需求覆盖${requirementCoverage}%，风险覆盖${riskCoverage}%，评测充分性：${sufficient ? '充分' : '未充分'}。${sufficient ? '当前结果可作为上线采信参考。' : supplementHint}`
+    : '本次评测尚未启动，暂无任务要求覆盖、风险覆盖和采信充分性结论。'
 
   return (
     <section className="panel score-panel plugin-panel">
@@ -85,7 +95,19 @@ export function ScoreCard() {
             <b>{String(item.rule_id ?? 'rule')}</b>
             <small>{String(item.scenario ?? 'scenario')}</small>
           </div>
-        )) : (
+        )) : score.passStatus === 'PASS' ? (
+          <div className="violation-empty">
+            <span>通过</span>
+            <b>未发现P0/P1违规</b>
+            <small>仍建议结合风险覆盖率复核采信充分性</small>
+          </div>
+        ) : scenarioCount ? (
+          <div className="violation-empty">
+            <span>未充分</span>
+            <b>暂无直接违规，需补齐风险覆盖</b>
+            <small>重点检查身份验证、拒绝退出、承诺类话术</small>
+          </div>
+        ) : (
           <div className="violation-empty">
             <span>待测</span>
             <b>等待评测完成</b>

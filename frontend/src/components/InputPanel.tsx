@@ -1,6 +1,6 @@
 import { ChevronDown, Database, FileUp, Play, Sparkles, Square } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import { compileDslPreview, getExamples } from '../api'
 import { defaultOfficialExample, officialExamples, type OfficialExample } from '../data/officialExamples'
 import { useEvaluationSse } from '../hooks/useEvaluationSse'
@@ -78,6 +78,15 @@ export function InputPanel() {
     }
   }
 
+  const submitEvaluation = (event: FormEvent) => {
+    event.preventDefault()
+    if (running) {
+      stop()
+      return
+    }
+    void start(effectiveInstruction)
+  }
+
   return (
     <section className="panel input-panel">
       <button className="panel-title" onClick={() => setOpen(!open)}>
@@ -87,7 +96,7 @@ export function InputPanel() {
         <ChevronDown className={open ? 'chevron open' : 'chevron'} size={18} />
       </button>
       {open && (
-        <div className="input-grid polished-input-grid">
+        <form className="input-grid polished-input-grid" onSubmit={submitEvaluation}>
           <label className="instruction-box">
             <span>任务指令文本</span>
             <textarea
@@ -124,17 +133,17 @@ export function InputPanel() {
             <b>准备就绪</b>
             <span>{fileName ? `已载入：${fileName}` : instruction ? '已输入任务文本' : '可直接使用官方示例'}</span>
             <button
+              type="submit"
               className={running ? 'start-button stop' : 'start-button'}
-              onClick={() => (running ? stop() : start(effectiveInstruction))}
             >
               {running ? <Square size={20} /> : <Play size={22} fill="currentColor" />}
               {running ? '停止评测' : '开始评测'}
             </button>
-            <button className="preview-button" onClick={previewDsl} disabled={previewing || running}>
+            <button type="button" className="preview-button" onClick={previewDsl} disabled={previewing || running}>
               {previewing ? '编译中...' : '预览状态机'}
             </button>
           </aside>
-        </div>
+        </form>
       )}
     </section>
   )
