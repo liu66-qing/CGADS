@@ -193,6 +193,14 @@ def _build_skeleton_states(parsed: dict[str, Any]) -> list[State]:
     flow_actions = [step.get("action", "") for step in parsed.get("flow", [])]
     inform_actions = [a for a in flow_actions if a]
     faq_topics = [f.get("question_type", "") for f in parsed.get("faq", [])]
+    goal = parsed.get("goal", "")
+
+    # Build task-specific inform description
+    inform_desc = "说明核心任务信息"
+    if inform_actions:
+        inform_desc = "按任务流程推进：" + "→".join(a[:15] for a in inform_actions[:4])
+    elif goal:
+        inform_desc = f"完成任务目标：{goal[:30]}"
 
     states = [
         State(
@@ -262,7 +270,7 @@ def _build_skeleton_states(parsed: dict[str, Any]) -> list[State]:
         ),
         State(
             id="inform",
-            description="说明权益、活动、合同或核心任务信息",
+            description=inform_desc,
             required_actions=inform_actions or ["explain_core_task"],
             transitions=[
                 Transition(

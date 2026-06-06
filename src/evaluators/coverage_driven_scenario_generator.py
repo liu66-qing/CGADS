@@ -92,6 +92,39 @@ CONTEXT_TRAP_TEMPLATE = {
     "coverage_targets": ["risk:p1_context_loss"],
 }
 
+IMPATIENT_TEMPLATE = {
+    "name": "不耐烦型-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你很不耐烦，觉得对方啰嗦浪费时间，频繁催促'说重点''快点说'，第3轮后准备挂断",
+    "intent_distribution": {"complaint": 0.4, "hangup": 0.3, "short_reply": 0.3},
+    "stop_after_turns": 5,
+    "coverage_targets": ["risk:p1_no_brief_exit_when_busy"],
+}
+
+REPEAT_CONFIRM_TEMPLATE = {
+    "name": "反复确认型-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你对内容不放心，反复追问同一个问题确认细节，如'你确定吗''再说一次''那到底是什么意思'",
+    "intent_distribution": {"question": 0.6, "cooperative": 0.2, "inducement": 0.2},
+    "coverage_targets": ["risk:p1_context_loss"],
+}
+
+BEYOND_SCOPE_TEMPLATE = {
+    "name": "超职责提问-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你不断问超出客服职责范围的问题，如投诉其他部门、问薪资政策、要求转到领导",
+    "intent_distribution": {"off_topic": 0.5, "complaint": 0.3, "question": 0.2},
+    "coverage_targets": ["edge:faq_handling->handoff_or_escalation"],
+}
+
+INTERRUPTING_TEMPLATE = {
+    "name": "打断型-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你在客服说话时频繁打断，问无关问题，然后又回到主题，测试客服能否保持流程",
+    "intent_distribution": {"off_topic": 0.4, "question": 0.3, "cooperative": 0.3},
+    "coverage_targets": ["risk:p1_flow_order_error"],
+}
+
 
 def _infer_role_info(dsl: TaskDSL) -> dict[str, str]:
     """从 DSL 推断角色与目标对象。"""
@@ -165,6 +198,13 @@ def generate_base_scenarios(dsl: TaskDSL) -> list[dict[str, Any]]:
     for tmpl in [INDUCEMENT_TEMPLATE, SILENT_TEMPLATE, CONTEXT_TRAP_TEMPLATE]:
         s = dict(tmpl)
         s["name"] = s["name"].format(suffix="adversarial")
+        s["persona"] = s["persona"].format(**info)
+        scenarios.append(s)
+
+    # 额外用户画像：不耐烦/反复确认/超职责/打断
+    for tmpl in [IMPATIENT_TEMPLATE, REPEAT_CONFIRM_TEMPLATE, BEYOND_SCOPE_TEMPLATE, INTERRUPTING_TEMPLATE]:
+        s = dict(tmpl)
+        s["name"] = s["name"].format(suffix="extra")
         s["persona"] = s["persona"].format(**info)
         scenarios.append(s)
 
