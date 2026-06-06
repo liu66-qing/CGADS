@@ -217,12 +217,20 @@ async def _parse_instruction_with_timeout(
     instruction: str,
     timeout_s: float = 45.0,
 ) -> dict[str, Any]:
-    """Run instruction parsing off the event loop with a bounded wait."""
+    """Run instruction parsing off the event loop with a bounded wait. Retries once on failure."""
     parser = InstructionParser(llm)
-    return await asyncio.wait_for(
-        asyncio.to_thread(parser.parse, instruction),
-        timeout=timeout_s,
-    )
+    for attempt in range(2):
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(parser.parse, instruction),
+                timeout=timeout_s,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            if attempt == 0:
+                logger.warning("parsing attempt 1 failed (%s), retrying...", exc.__class__.__name__)
+                await asyncio.sleep(2)
+                continue
+            raise
 
 
 def _write_realtime_eval_result(
@@ -314,9 +322,9 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 # SSE Pipeline
 # ============================================================
 
-PIPELINE_TIMEOUT_S = 270  # Pipeline must complete within 4.5min
-DIALOGUE_STAGE_TIMEOUT_S = 240  # Dialogue phase cap — allow full 2 rounds
-PER_SCENARIO_TIMEOUT_S = 22  # Hard cap per scenario — tight but sufficient for 5 turns
+PIPELINE_TIMEOUT_S = 300  # Pipeline must complete within 5min
+DIALOGUE_STAGE_TIMEOUT_S = 260  # Dialogue phase cap — allow full 2 rounds
+PER_SCENARIO_TIMEOUT_S = 35  # Hard cap per scenario — sufficient for 5 turns with 3s LLM
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
@@ -324,7 +332,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     realtime_budget = min(max(8, request.budget), 12)
     realtime_max_turns = min(max(3, request.max_turns), 5)
-    realtime_warmup_ratio = min(max(request.warmup_ratio, 0.1), 1.0)
+    realtime_warmup_ratio = min(max(request.warmup_ratio, 0.6), 1.0)
     pipeline_started = time.time()
     started_at = datetime.now()
     logger.info(
@@ -355,11 +363,11 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             },
         })
     except asyncio.TimeoutError:
-        yield sse_event("stage_error", {"stage": "parsing", "error": "指令解析超时(45s)，DeepSeek API响应过慢，请重试"})
+        yield sse_event("stage_error", {"stage": "parsing", "error": "指令解析超时(60s)，DeepSeek API响应过慢。已自动重试1次仍失败，请稍后重试。"})
         return
     except Exception as exc:
         logger.exception("parsing stage error")
-        yield sse_event("stage_error", {"stage": "parsing", "error": f"解析失败: {type(exc).__name__}: {exc}"})
+        yield sse_event("stage_error", {"stage": "parsing", "error": f"解析失败: {type(exc).__name__}: {str(exc)[:200]}。请检查网络或稍后重试。"})
         return
 
     await asyncio.sleep(0.1)
@@ -447,7 +455,9 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         if time.time() > dialogue_deadline and len(scenario_results) >= MIN_SCENARIOS:
             logger.warning("dialogue stage timeout reached after %d scenarios", idx)
             break
-        result = await _run_single_scenario(scenario, idx, parsed_task, dsl, llm, realtime_max_turns)
+        scenario_max_turns = scenario.get("stop_after_turns", realtime_max_turns)
+        scenario_max_turns = min(scenario_max_turns, realtime_max_turns)
+        result = await _run_single_scenario(scenario, idx, parsed_task, dsl, llm, scenario_max_turns)
         scenario_results.append(result)
 
         coverage_tracker.record_scenario(

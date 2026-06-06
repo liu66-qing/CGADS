@@ -152,7 +152,6 @@ class StateTracker:
             if turns_in_inform >= 2 or self.current_state != "inform":
                 if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单", "配送", "完成", "签署", "生效", "通知", "任务", "要求"]):
                     updates.setdefault("benefit_explained", True)
-                updates.setdefault("benefit_explained", True)
         if any(kw in text for kw in ["再见", "祝您", "辛苦", "打扰了", "顺利"]):
             updates.setdefault("polite_close_attempted", True)
         if self.current_state == "busy_handling":
