@@ -18,11 +18,24 @@ const toHundred = (value: number) => (value <= 5 ? value * 20 : value)
 export function ScoreCard() {
   const score = useEvaluationStore((s) => s.score)
   const coverage = useEvaluationStore((s) => s.coverage)
+  const dialogues = useEvaluationStore((s) => s.dialogues)
   const data = Object.entries(dimensionMap).map(([key, label]) => ({
     subject: label,
     value: toHundred(score.dimensionScores[key] ?? 0),
   }))
   const passClass = score.passStatus === 'PASS' ? 'pass' : score.passStatus === 'WAITING' ? 'waiting' : 'fail'
+  const scenarioCount = score.scenarios.length
+  const personaCount = new Set(
+    score.scenarios
+      .map((scenario) => dialogues[scenario.id]?.persona)
+      .filter((persona): persona is string => Boolean(persona)),
+  ).size
+  const requirementCoverage = Math.round(coverage.requirement)
+  const sufficient = scenarioCount > 0 && requirementCoverage >= 80 && score.passStatus === 'PASS'
+  const supplementHint = score.suggestions[0] ?? '需补充拒绝型/忙碌型用户验证。'
+  const summaryText = scenarioCount
+    ? `本次评测覆盖${scenarioCount}个场景/${personaCount || scenarioCount}类用户画像，业务需求覆盖${requirementCoverage}%，评测充分性：${sufficient ? '充分' : '未充分'}。${sufficient ? '当前结果可作为上线采信参考。' : supplementHint}`
+    : '本次评测尚未启动，暂无任务要求覆盖、未覆盖项和采信充分性结论。'
 
   return (
     <section className="panel score-panel plugin-panel">
@@ -32,6 +45,10 @@ export function ScoreCard() {
           <p>数字人本次评测的综合得分、维度分析和覆盖率</p>
         </div>
       </header>
+      <div className="evaluation-summary plugin-card">
+        <span>评测摘要</span>
+        <strong>{summaryText}</strong>
+      </div>
       <div className="score-layout">
         <div className="score-total plugin-card">
           <ThemeIcon name="score" size={42} />
