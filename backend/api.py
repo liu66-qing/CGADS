@@ -322,17 +322,17 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 # SSE Pipeline
 # ============================================================
 
-PIPELINE_TIMEOUT_S = 300  # Pipeline must complete within 5min
-DIALOGUE_STAGE_TIMEOUT_S = 260  # Dialogue phase cap — allow full 2 rounds
-PER_SCENARIO_TIMEOUT_S = 35  # Hard cap per scenario — sufficient for 5 turns with 3s LLM
+PIPELINE_TIMEOUT_S = 330  # Pipeline must complete within 5.5min
+DIALOGUE_STAGE_TIMEOUT_S = 290  # Dialogue phase cap — allow full 2 rounds
+PER_SCENARIO_TIMEOUT_S = 32  # Hard cap per scenario — 5 turns × 6s/turn + buffer
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
     """Stream realtime evaluation events."""
 
     realtime_budget = min(max(8, request.budget), 12)
-    realtime_max_turns = min(max(3, request.max_turns), 5)
-    realtime_warmup_ratio = min(max(request.warmup_ratio, 0.6), 1.0)
+    realtime_max_turns = min(max(3, request.max_turns), 6)
+    realtime_warmup_ratio = min(max(request.warmup_ratio, 0.5), 0.75)
     pipeline_started = time.time()
     started_at = datetime.now()
     logger.info(
@@ -447,7 +447,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
 
     scenario_results = []
     MIN_SCENARIOS = 4
-    hard_ceiling = pipeline_started + PIPELINE_TIMEOUT_S - 40
+    hard_ceiling = pipeline_started + PIPELINE_TIMEOUT_S - 30
     for idx, scenario in enumerate(scenarios_round1):
         if time.time() > hard_ceiling:
             logger.warning("hard pipeline ceiling reached after %d scenarios", idx)
@@ -503,15 +503,15 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     remaining_budget = realtime_budget - len(scenarios_round1)
     round2_planned = 0
     round2_executed = 0
-    time_remaining = dialogue_deadline - time.time()
+    time_until_ceiling = hard_ceiling - time.time()
 
-    if gaps and remaining_budget > 0 and time_remaining > 5:
+    if gaps and remaining_budget > 0 and time_until_ceiling > PER_SCENARIO_TIMEOUT_S:
         yield sse_event("cgads_gaps", {
             "gap_count": len(gaps),
             "gaps": gaps[:10],
         })
 
-        # Round 2: targeted
+        # Round 2: targeted gap-filling
         gap_scenarios = _risk_first_scenarios(generator.generate_from_coverage_report(gaps))[:remaining_budget]
         round2_planned = len(gap_scenarios)
         yield sse_event("cgads_round", {
@@ -525,9 +525,6 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         for idx, scenario in enumerate(gap_scenarios):
             if time.time() > hard_ceiling:
                 logger.warning("Round2 hard ceiling after %d gap scenarios", idx)
-                break
-            if time.time() > dialogue_deadline and idx >= 1:
-                logger.warning("dialogue gap round timeout after %d gap scenarios", idx)
                 break
             result = await _run_single_scenario(scenario, len(scenarios_round1) + idx, parsed_task, dsl, llm, realtime_max_turns)
             scenario_results.append(result)
@@ -1021,9 +1018,9 @@ async def _run_single_scenario(
 
             # Only terminate on terminal state after minimum depth reached
             in_terminal = state_tracker.current_state in ("refusal_exit", "closing", "handoff_or_escalation")
-            if (sim.should_hangup() or user_wants_end) and turn >= 2:
+            if (sim.should_hangup() or user_wants_end) and turn >= 3:
                 break
-            if in_terminal and turn >= 3:
+            if in_terminal and turn >= 4:
                 break
 
             logger.info(

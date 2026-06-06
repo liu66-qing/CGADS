@@ -147,9 +147,10 @@ class StateTracker:
             updates.setdefault("verification_path_provided", True)
             if self.current_state == "auth_or_trust":
                 updates.setdefault("trust_verified", True)
-        if self.current_state in ("inform", "faq_handling", "intent_confirm"):
+        # benefit_explained: only in inform state, after 3+ agent turns in inform
+        if self.current_state == "inform":
             turns_in_inform = sum(1 for h in self.history if h.new_state == "inform")
-            if turns_in_inform >= 2 or self.current_state != "inform":
+            if turns_in_inform >= 3:
                 if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单", "配送", "完成", "签署", "生效", "通知", "任务", "要求"]):
                     updates.setdefault("benefit_explained", True)
         if any(kw in text for kw in ["再见", "祝您", "辛苦", "打扰了", "顺利"]):
@@ -328,18 +329,13 @@ class StateTracker:
             updates.setdefault("refusal_detected", True)
         if intent.intent == "busy":
             updates["user_busy"] = True
-            updates["reschedule_agreed"] = True
+            if prev == "busy_handling":
+                updates["reschedule_agreed"] = True
         if prev == "auth_or_trust" and new_state == "inform":
             updates["trust_verified"] = True
-        if intent.intent == "cooperative" and prev == "auth_or_trust":
-            updates["trust_verified"] = True
-        if intent.intent == "cooperative" and prev in ("faq_handling", "inform"):
-            updates["all_questions_answered"] = True
-        if intent.intent == "cooperative" and prev == "intent_confirm":
-            updates["intent_recorded"] = True
-        # Auto-advance: if stuck in same state for 3+ turns, set progression slot
-        same_state_count = sum(1 for h in self.history[-3:] if h.new_state == prev)
-        if same_state_count >= 3:
+        # Auto-advance: if stuck in same state for 4+ turns, set progression slot
+        same_state_count = sum(1 for h in self.history[-4:] if h.new_state == prev)
+        if same_state_count >= 4:
             if prev == "inform":
                 updates.setdefault("benefit_explained", True)
             elif prev == "faq_handling":
@@ -348,6 +344,8 @@ class StateTracker:
                 updates.setdefault("intent_recorded", True)
             elif prev == "auth_or_trust":
                 updates.setdefault("trust_verified", True)
+            elif prev == "busy_handling":
+                updates.setdefault("reschedule_agreed", True)
         return updates
 
     def _apply_slots(self, updates: dict[str, Any]) -> None:

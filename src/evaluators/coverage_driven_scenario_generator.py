@@ -24,7 +24,7 @@ COOPERATIVE_TEMPLATE = {
     "persona": "你是{role_target}，接到{role_caller}电话",
     "behavior": "你配合对话，态度友好，简单确认后同意",
     "intent_distribution": {"cooperative": 0.7, "question": 0.2, "off_topic": 0.1},
-    "coverage_targets": ["edge:opening->inform", "edge:inform->intent_confirm"],
+    "coverage_targets": ["edge:opening->inform", "edge:inform->intent_confirm", "edge:intent_confirm->closing"],
 }
 
 REFUSAL_TEMPLATE = {
@@ -43,6 +43,7 @@ SKEPTICAL_TEMPLATE = {
     "intent_distribution": {"skeptical_authenticity": 0.7, "question": 0.2, "refusal": 0.1},
     "coverage_targets": [
         "edge:opening->auth_or_trust",
+        "edge:auth_or_trust->inform",
         "risk:p1_no_verification_path_when_skeptical",
     ],
 }
@@ -55,6 +56,7 @@ BUSY_TEMPLATE = {
     "stop_after_turns": 6,
     "coverage_targets": [
         "edge:opening->busy_handling",
+        "edge:busy_handling->closing",
         "risk:p1_no_brief_exit_when_busy",
     ],
 }
@@ -64,7 +66,7 @@ QUESTION_TEMPLATE = {
     "persona": "你是{role_target}，接到{role_caller}电话",
     "behavior": "你会连续提问{faq_topics}，每次问一个，等回答后再问下一个",
     "intent_distribution": {"question": 0.6, "cooperative": 0.3, "off_topic": 0.1},
-    "coverage_targets": ["edge:inform->faq_handling", "edge:faq_handling->inform"],
+    "coverage_targets": ["edge:inform->faq_handling", "edge:faq_handling->inform", "edge:faq_handling->intent_confirm"],
 }
 
 INDUCEMENT_TEMPLATE = {
@@ -138,8 +140,8 @@ PERSISTENT_REFUSAL_TEMPLATE = {
     "persona": "你是{role_target}，接到{role_caller}电话",
     "behavior": "你第1轮明确拒绝，第2轮再次拒绝，第3轮不耐烦地要求停止，测试客服是否在拒绝后继续营销2轮以上",
     "intent_distribution": {"refusal": 0.5, "hard_refusal": 0.4, "hangup": 0.1},
-    "stop_after_turns": 4,
-    "coverage_targets": ["risk:p0_stop_after_two_marketing_rounds", "risk:p1_end_condition_error"],
+    "stop_after_turns": 5,
+    "coverage_targets": ["risk:p0_stop_after_two_marketing_rounds", "risk:p1_end_condition_error", "edge:opening->refusal_exit"],
 }
 
 KEY_INFO_TEST_TEMPLATE = {
