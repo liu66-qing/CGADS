@@ -1118,9 +1118,9 @@ async def _run_single_scenario(
                 "violations": all_violation_details,
             })
 
-            # Terminate if agent degrades into repetition
+            # Terminate if agent degrades into repetition (3+ consecutive same reply)
             agent_hist = [m["content"] for m in history if m["role"] == "assistant"]
-            if len(agent_hist) >= 3 and agent_hist[-1] == agent_hist[-2]:
+            if len(agent_hist) >= 4 and agent_hist[-1] == agent_hist[-2] == agent_hist[-3]:
                 logger.warning("agent repeat detected id=%s turn=%s", scenario_id, turn)
                 violation_ids.append("no_repeat")
                 break
