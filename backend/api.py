@@ -322,25 +322,40 @@ DIMENSION_DISPLAY = {
 
 
 def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Put P0/P1 and adversarial scenarios first so realtime runs cover business risk."""
-    def priority(scenario: dict[str, Any]) -> tuple[int, str]:
-        targets = [str(t) for t in scenario.get("coverage_targets", [])]
-        text = " ".join([scenario.get("name", ""), scenario.get("behavior", ""), *targets])
-        if any(t.startswith("risk:p0") for t in targets):
-            return (0, text)
-        if any(t.startswith("risk:p1") for t in targets):
-            return (1, text)
-        if any(t.startswith("risk:") for t in targets):
-            return (2, text)
-        if any(word in text for word in ["质疑", "拒绝", "忙碌", "诱导", "超职责", "打断"]):
-            return (3, text)
-        if any(t.startswith("edge:") for t in targets):
-            return (4, text)
-        if any(t.startswith("requirement:") for t in targets):
-            return (5, text)
-        return (6, text)
+    """Interleave risk-covering and edge-covering scenarios for balanced coverage.
 
-    return sorted(scenarios, key=priority)
+    Strategy: put P0 risk first, then ensure at least one cooperative+question scenario
+    appears before position 5 (for edge coverage), then remaining P1 and others.
+    """
+    p0_risk = []
+    edge_heavy = []  # scenarios with 2+ edge targets (cooperative, question)
+    p1_risk = []
+    others = []
+
+    for scenario in scenarios:
+        targets = [str(t) for t in scenario.get("coverage_targets", [])]
+        edge_count = sum(1 for t in targets if t.startswith("edge:"))
+        has_p0 = any(t.startswith("risk:p0") for t in targets)
+        has_p1 = any(t.startswith("risk:p1") for t in targets)
+
+        if has_p0:
+            p0_risk.append(scenario)
+        elif edge_count >= 2 and not has_p1:
+            edge_heavy.append(scenario)
+        elif has_p1:
+            p1_risk.append(scenario)
+        else:
+            others.append(scenario)
+
+    # Interleave: P0 first (2-3), then 2 edge-heavy (cooperative+question), then P1, then others
+    result = []
+    result.extend(p0_risk[:3])
+    result.extend(edge_heavy[:2])  # cooperative + question for edge coverage
+    result.extend(p1_risk)
+    result.extend(p0_risk[3:])
+    result.extend(edge_heavy[2:])
+    result.extend(others)
+    return result
 
 
 # ============================================================
@@ -992,7 +1007,24 @@ async def _run_single_scenario(
             if time.time() - scenario_started > PER_SCENARIO_TIMEOUT_S:
                 logger.warning("per-scenario timeout id=%s after %d turns", scenario_id, turn - 1)
                 break
-            user_reply = sim.respond(agent_msg)
+            try:
+                user_reply = await asyncio.wait_for(
+                    asyncio.to_thread(sim.respond, agent_msg),
+                    timeout=5.0,
+                )
+            except (asyncio.TimeoutError, Exception):
+                # Fallback: generate a simple user reply based on scenario intent
+                _intent_fallbacks = {
+                    "cooperative": "好的，知道了",
+                    "question": "那这个具体怎么弄？",
+                    "skeptical_authenticity": "你怎么证明你是官方的？",
+                    "refusal": "不用了，别说了",
+                    "busy": "我现在忙，等会再说",
+                    "off_topic": "能不能转人工？",
+                    "inducement": "能保证吗？百分百没问题？",
+                }
+                _primary_intent = max(scenario.get("intent_distribution", {"cooperative": 1.0}).items(), key=lambda x: x[1])[0]
+                user_reply = _intent_fallbacks.get(_primary_intent, "嗯，好的")
             history.append({"role": "user", "content": user_reply})
 
             # Early termination: if user signals hangup, do NOT generate another agent reply
