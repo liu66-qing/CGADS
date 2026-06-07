@@ -10,7 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://diligent-eagerness-production-14ff.up.railway.app/">🌐 在线体验</a> ·
+  <a href="http://139.196.183.227/">🌐 在线体验(国内)</a> ·
+  <a href="https://diligent-eagerness-production-14ff.up.railway.app/">🌐 在线体验(海外)</a> ·
   <a href="./docs/项目文档.md">📄 项目文档</a> ·
   <a href="./docs/系统设计方案.md">📐 系统设计</a> ·
   <a href="./docs/作品简介.md">📋 作品简介</a>
@@ -153,7 +154,8 @@ if truncated_output: communication_experience强制≤3分
 
 ### 在线体验
 
-**🌐 [https://diligent-eagerness-production-14ff.up.railway.app](https://diligent-eagerness-production-14ff.up.railway.app)**
+**🌐 国内访问：[http://139.196.183.227](http://139.196.183.227)**
+**🌐 海外访问：[https://diligent-eagerness-production-14ff.up.railway.app](https://diligent-eagerness-production-14ff.up.railway.app)**
 
 粘贴任务指令 → 点击"开始评测" → 观察Pipeline实时推进 → 查看三层采信判定 → 下载评估报告
 
