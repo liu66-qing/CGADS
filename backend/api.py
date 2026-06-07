@@ -770,6 +770,17 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         else:
             pass_status = "PASS"
 
+    # Apply score cap based on P0/P1 violations (MUST enforce, not just display)
+    if pass_status == "FAIL_P0":
+        avg_score = min(avg_score, 30)
+    elif pass_status == "CAPPED_P1":
+        if total_p1 >= 3:
+            avg_score = min(avg_score, 50)
+        elif total_p1 == 2:
+            avg_score = min(avg_score, 60)
+        elif total_p1 == 1:
+            avg_score = min(avg_score, 70)
+
     yield sse_event("stage_complete", {
         "stage": "scoring",
         "duration_s": 0,

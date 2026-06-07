@@ -8,9 +8,6 @@ import { PipelineTracker } from './components/PipelineTracker'
 import { ReportPanel } from './components/ReportPanel'
 import { ScoreCard } from './components/ScoreCard'
 import { StateMachineGraph } from './components/StateMachineGraph'
-import { ThemeIcon } from './components/ThemeIcon'
-import { TrustBoundaryPanel } from './components/TrustBoundaryPanel'
-import { OptimizationAdvicePanel } from './components/OptimizationAdvicePanel'
 import { useEvaluationStore } from './store/evaluationStore'
 
 export function App() {
@@ -42,34 +39,32 @@ export function App() {
 
   return (
     <main>
-      <nav className="topbar no-logo">
-        <div className="brand-text">
-          <h1>外呼对话评测系统</h1>
-          <p>对对队 · 多轮指令遵循自动评测</p>
-        </div>
+      <nav className="topbar">
+        <h1>外呼对话评测系统</h1>
+        <span className="topbar-sub">对对队 · 多轮指令遵循自动评测</span>
         <span className={`backend-chip ${backendStatus}`}>{backendText}</span>
-        <div className="team"><ThemeIcon name="team" size={28} /> 对对队</div>
       </nav>
 
       <div className="workspace">
+        {/* 顶部：输入 + 进度 */}
         <InputPanel />
-        <div className="evaluation-workbench">
-          <aside className="route-rail" aria-label="评测进度">
-            <PipelineTracker />
-          </aside>
-          <section className="business-main" aria-label="评测主体内容">
-            <ScoreCard />
-            <EvidenceTimeline />
-            <TrustBoundaryPanel />
-            <OptimizationAdvicePanel />
-            <DialogueViewer />
-            <ReportPanel />
-            <details className="state-machine-collapsible">
-              <summary>状态机可视化（辅助分析）</summary>
-              <StateMachineGraph />
-            </details>
-          </section>
-        </div>
+        <PipelineTracker />
+
+        {/* 核心结论区 — 首屏 */}
+        <ScoreCard />
+
+        {/* 证据 + 对话 */}
+        <EvidenceTimeline />
+        <DialogueViewer />
+
+        {/* 完整报告 */}
+        <ReportPanel />
+
+        {/* 辅助分析 — 折叠 */}
+        <details className="auxiliary-section">
+          <summary>状态机可视化（辅助分析）</summary>
+          <StateMachineGraph />
+        </details>
         <HistoryStrip />
       </div>
     </main>

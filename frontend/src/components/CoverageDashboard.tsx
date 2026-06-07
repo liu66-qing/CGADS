@@ -1,6 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer } from 'recharts'
 import { useEvaluationStore } from '../store/evaluationStore'
-import { ThemeIcon } from './ThemeIcon'
 
 const labels = [
   ['state', '状态覆盖'],
@@ -9,7 +8,7 @@ const labels = [
   ['requirement', '要求覆盖'],
 ] as const
 
-const colorFor = (value: number) => (value >= 80 ? '#2563eb' : value >= 60 ? '#64748b' : '#94a3b8')
+const colorFor = (value: number) => (value >= 80 ? '#FF8C00' : value >= 60 ? '#64748b' : '#94a3b8')
 
 export function CoverageDashboard() {
   const coverage = useEvaluationStore((s) => s.coverage)
@@ -18,13 +17,12 @@ export function CoverageDashboard() {
       {labels.map(([key, label]) => {
         const value = coverage[key]
         return (
-          <article className="coverage-ring plugin-card" key={key}>
-            <ThemeIcon name="coverage" size={22} className="coverage-mini-icon" />
-            <ResponsiveContainer width="100%" height={92}>
+          <article className="coverage-ring" key={key}>
+            <ResponsiveContainer width="100%" height={80}>
               <PieChart>
-                <Pie data={[{ value }, { value: 100 - value }]} innerRadius={30} outerRadius={40} startAngle={90} endAngle={-270} dataKey="value">
+                <Pie data={[{ value }, { value: 100 - value }]} innerRadius={26} outerRadius={34} startAngle={90} endAngle={-270} dataKey="value">
                   <Cell fill={colorFor(value)} />
-                  <Cell fill="#e8edf5" />
+                  <Cell fill="#E5E7EB" />
                 </Pie>
               </PieChart>
             </ResponsiveContainer>

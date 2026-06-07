@@ -2,7 +2,6 @@ import { ShieldAlert } from 'lucide-react'
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, ResponsiveContainer } from 'recharts'
 import { useEvaluationStore } from '../store/evaluationStore'
 import { CoverageDashboard } from './CoverageDashboard'
-import { ThemeIcon } from './ThemeIcon'
 
 const dimensionMap: Record<string, string> = {
   task_completion: '任务完成',
@@ -51,19 +50,17 @@ export function ScoreCard() {
       : '本次评测尚未启动，暂无任务要求覆盖、风险覆盖和采信充分性结论。'
 
   return (
-    <section className="panel score-panel plugin-panel">
-      <header className="section-head">
-        <div>
-          <h2>评测结论</h2>
-          <p>数字人本次评测的综合得分、维度分析和覆盖率</p>
-        </div>
+    <section className="panel score-panel">
+      <header className="panel-head">
+        <h2>评测结论</h2>
+        <p>数字人本次评测的综合得分、维度分析和覆盖率</p>
       </header>
-      <div className="evaluation-summary plugin-card">
+      <div className="evaluation-summary">
         <span>评测摘要</span>
         <strong>{summaryText}</strong>
       </div>
       {(score as any).threeTierJudgment && (
-        <div className="three-tier-judgment plugin-card">
+        <div className="three-tier-judgment ">
           <h3>三层判定</h3>
           <div className="tier-row">
             <span className="tier-label">数字人表现</span>
@@ -89,14 +86,13 @@ export function ScoreCard() {
         </div>
       )}
       <div className="score-layout">
-        <div className="score-total plugin-card">
-          <ThemeIcon name="score" size={42} />
+        <div className="score-total">
           <span>综合得分</span>
           <strong>{score.totalScore || '--'}<em>/100</em></strong>
           <b className={passClass}>{score.passStatus}</b>
           <small>结合覆盖率 {Math.round((coverage.state + coverage.edge + coverage.risk + coverage.requirement) / 4)}%</small>
         </div>
-        <div className="radar-box plugin-card">
+        <div className="radar-box ">
           <ResponsiveContainer width="100%" height={220}>
             <RadarChart data={data}>
               <PolarGrid />
@@ -105,7 +101,7 @@ export function ScoreCard() {
             </RadarChart>
           </ResponsiveContainer>
         </div>
-        <div className="dimension-bars plugin-card">
+        <div className="dimension-bars ">
           {data.map((item) => (
             <label key={item.subject}>
               <span>{item.subject}</span>
@@ -116,7 +112,7 @@ export function ScoreCard() {
         </div>
       </div>
       <CoverageDashboard />
-      <div className="violation-table plugin-card">
+      <div className="violation-table ">
         <h3><ShieldAlert size={16} /> 评分详情</h3>
         {score.violations.length ? score.violations.slice(0, 5).map((item, index) => (
           <div key={index}>
@@ -145,7 +141,7 @@ export function ScoreCard() {
         )}
       </div>
       {score.scoringBreakdown && (
-        <details className="scoring-breakdown plugin-card">
+        <details className="scoring-breakdown ">
           <summary><h3 style={{ display: 'inline', fontSize: '14px' }}>评分计算明细</h3></summary>
           {score.scoringBreakdown.business_summary && (
             <p className="business-summary">{score.scoringBreakdown.business_summary}</p>
@@ -217,7 +213,7 @@ export function ScoreCard() {
         </details>
       )}
       {score.credibilityBoundary && (
-        <div className="credibility-boundary plugin-card">
+        <div className="credibility-boundary ">
           <h3>采信边界</h3>
           {score.round2Info && score.round2Info.skipped_reason && (
             <div className="cb-section cb-info">
@@ -243,7 +239,7 @@ export function ScoreCard() {
         </div>
       )}
       {(score as any).fixImpactEstimate && (
-        <div className="fix-impact plugin-card">
+        <div className="fix-impact ">
           <h3>修复→复测闭环</h3>
           <div className="fix-impact-summary">
             <div className="fix-score fix-before">

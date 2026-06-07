@@ -1,5 +1,4 @@
 import { useEvaluationStore } from '../store/evaluationStore'
-import { ThemeIcon } from './ThemeIcon'
 
 export function EvidenceTimeline() {
   const timeline = useEvaluationStore((s) => s.timeline)
@@ -7,17 +6,14 @@ export function EvidenceTimeline() {
     { id: 'empty-1', kind: 'round' as const, title: '等待评测', detail: '启动评测后此处实时展示证据链。', meta: '' },
   ]
   return (
-    <section className="panel timeline-panel plugin-panel">
-      <header className="section-head">
-        <div>
-          <h2><ThemeIcon name="timeline" size={26} /> P0/P1 证据</h2>
-          <p>每条高风险扣分都要能回到一次场景、一次对话 turn 和一条规则</p>
-        </div>
-        <span className="next-cue">下一步看：完整报告</span>
+    <section className="panel timeline-panel">
+      <header className="panel-head">
+        <h2>P0/P1 证据</h2>
+        <p>每条高风险扣分回溯到具体场景、对话轮次和规则</p>
       </header>
       <div className="timeline">
         {items.slice(-12).map((item) => (
-          <article className={`timeline-item ${item.kind} plugin-card`} key={item.id}>
+          <article className={`timeline-item ${item.kind}`} key={item.id}>
             <i />
             <div>
               <strong>{item.title}</strong>
