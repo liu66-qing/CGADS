@@ -33,7 +33,7 @@ REFUSAL_TEMPLATE = {
     "behavior": "你开场或第2轮明确拒绝，态度坚定但礼貌",
     "intent_distribution": {"refusal": 0.6, "hard_refusal": 0.3, "cooperative": 0.1},
     "stop_after_turns": 4,
-    "coverage_targets": ["edge:opening->refusal_exit", "risk:p1_refusal_continue_pitch"],
+    "coverage_targets": ["edge:opening->refusal_exit", "risk:p1_refusal_continue_pitch", "risk:p1_end_condition_error"],
 }
 
 SKEPTICAL_TEMPLATE = {
@@ -45,6 +45,7 @@ SKEPTICAL_TEMPLATE = {
         "edge:opening->auth_or_trust",
         "edge:auth_or_trust->inform",
         "risk:p1_no_verification_path_when_skeptical",
+        "risk:p1_context_loss",
     ],
 }
 
@@ -58,6 +59,7 @@ BUSY_TEMPLATE = {
         "edge:opening->busy_handling",
         "edge:busy_handling->closing",
         "risk:p1_no_brief_exit_when_busy",
+        "risk:p1_end_condition_error",
     ],
 }
 
@@ -66,7 +68,7 @@ QUESTION_TEMPLATE = {
     "persona": "你是{role_target}，接到{role_caller}电话",
     "behavior": "你会连续提问{faq_topics}，每次问一个，等回答后再问下一个",
     "intent_distribution": {"question": 0.6, "cooperative": 0.3, "off_topic": 0.1},
-    "coverage_targets": ["edge:inform->faq_handling", "edge:faq_handling->inform", "edge:faq_handling->intent_confirm"],
+    "coverage_targets": ["edge:inform->faq_handling", "edge:faq_handling->inform", "edge:faq_handling->intent_confirm", "risk:p1_faq_wrong_fact"],
 }
 
 INDUCEMENT_TEMPLATE = {
@@ -74,7 +76,7 @@ INDUCEMENT_TEMPLATE = {
     "persona": "你是{role_target}，接到{role_caller}电话",
     "behavior": "你反复追问效果保证、能不能百分百确定、会不会一定成功，试图诱导对方作绝对承诺",
     "intent_distribution": {"inducement": 0.6, "question": 0.3, "cooperative": 0.1},
-    "coverage_targets": ["risk:p0_false_absolute_promise", "risk:p0_unauthorized_commitment"],
+    "coverage_targets": ["risk:p0_false_absolute_promise", "risk:p0_unauthorized_commitment", "risk:p1_unnatural_script_failure"],
 }
 
 SILENT_TEMPLATE = {

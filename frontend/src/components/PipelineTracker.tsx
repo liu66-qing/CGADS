@@ -75,10 +75,10 @@ export function PipelineTracker() {
       {/* Live coverage bar (only during/after dialogue) */}
       {(coverage.state > 0 || coverage.edge > 0) && (
         <div className="pt-coverage">
-          <span>状态 {Math.round(coverage.state)}%</span>
-          <span>边 {Math.round(coverage.edge)}%</span>
-          <span>风险 {Math.round(coverage.risk)}%</span>
-          <span>需求 {Math.round(coverage.requirement)}%</span>
+          <span className="cov-state">状态 {Math.round(coverage.state)}%</span>
+          <span className="cov-edge">边 {Math.round(coverage.edge)}%</span>
+          <span className="cov-risk">风险 {Math.round(coverage.risk)}%</span>
+          <span className="cov-req">需求 {Math.round(coverage.requirement)}%</span>
         </div>
       )}
     </section>

@@ -333,12 +333,11 @@ DIMENSION_DISPLAY = {
 
 
 def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Interleave risk-covering and edge-covering scenarios for balanced coverage.
+    """Risk-dominant scenario scheduling for stable 80%+ risk coverage.
 
-    Strategy: ensure BOTH risk and edge coverage are maximized in Round1 (budget ~9-12).
-    Round-robin: P0(2) → edge(5) → P1(2) → remaining interleaved.
-    Edge-heavy threshold lowered to 1+ edge targets to include more transition scenarios.
-    This ensures top 9 has 5 edge-heavy + 4 risk scenarios for 75%+ edge coverage.
+    Strategy: P0(3) → P1(4) → edge(3) ensures 7 risk-focused scenarios in Round1.
+    P1 scenarios with dual edge targets maintain 75%+ edge coverage.
+    Phase2 interleaves remaining edge/risk scenarios for gap-filling.
     """
     p0_risk = []
     edge_heavy = []  # scenarios with 1+ edge targets
@@ -363,21 +362,22 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
         else:
             others.append(scenario)
 
-    # Build result: P0(2) → edge(5) → P1(3) → remaining interleaved
-    # Give edge-heavy 5 slots for 80%+ edge, P1 3 slots for 85%+ risk
+    # Build result: P0(3) → P1(4) → edge(3) → remaining interleaved
+    # Risk-dominant: 7 risk scenarios in Round1 ensures 80%+ risk coverage
+    # Edge maintained via P1 dual-targets + Phase2 interleave
     result = []
     p0_i, edge_i, p1_i = 0, 0, 0
 
-    # Phase 1 (positions 1-10): 2 P0 + 5 edge-heavy + 3 P1
-    for _ in range(2):
+    # Phase 1 (positions 1-10): 3 P0 + 4 P1 + 3 edge-heavy
+    for _ in range(3):
         if p0_i < len(p0_risk):
             result.append(p0_risk[p0_i]); p0_i += 1
-    for _ in range(5):
-        if edge_i < len(edge_heavy):
-            result.append(edge_heavy[edge_i]); edge_i += 1
-    for _ in range(3):
+    for _ in range(4):
         if p1_i < len(p1_risk):
             result.append(p1_risk[p1_i]); p1_i += 1
+    for _ in range(3):
+        if edge_i < len(edge_heavy):
+            result.append(edge_heavy[edge_i]); edge_i += 1
 
     # Phase 2 (positions 8+): remaining P0, edge, P1 interleaved
     while p0_i < len(p0_risk) or edge_i < len(edge_heavy) or p1_i < len(p1_risk):
