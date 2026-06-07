@@ -362,9 +362,10 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 # SSE Pipeline
 # ============================================================
 
-PIPELINE_TIMEOUT_S = 270  # Pipeline must complete within ~4.5min
-DIALOGUE_STAGE_TIMEOUT_S = 180  # Dialogue Round1 cap (leave room for Round2)
-PER_SCENARIO_TIMEOUT_S = 30  # Hard cap per scenario — 6 turns × 5s/turn
+PIPELINE_TIMEOUT_S = 240  # Pipeline must complete within 4min
+DIALOGUE_STAGE_TIMEOUT_S = 160  # Dialogue Round1 cap (leave room for Round2)
+PER_SCENARIO_TIMEOUT_S = 28  # Hard cap per scenario
+PARALLEL_BATCH_SIZE = 2  # Run 2 scenarios concurrently
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
@@ -424,7 +425,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             yield sse_event("stage_error", {"stage": "parsing", "error": f"解析失败: {type(exc).__name__}: {str(exc)[:200]}。请检查网络或稍后重试。"})
             return
 
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.01)
 
     yield sse_event("stage_start", {"stage": "dsl_compile", "label": "DSL编译"})
     t0 = time.time()
@@ -463,7 +464,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         yield sse_event("stage_error", {"stage": "dsl_compile", "error": str(exc)})
         return
 
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.01)
 
     yield sse_event("stage_start", {"stage": "scenario_gen", "label": "场景生成"})
     t0 = time.time()
@@ -492,7 +493,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         },
     })
 
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.01)
 
     yield sse_event("stage_start", {"stage": "dialogue", "label": "对话执行"})
     t0 = time.time()
@@ -502,87 +503,42 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     scenario_results = []
     MIN_SCENARIOS = 4
     hard_ceiling = pipeline_started + PIPELINE_TIMEOUT_S - 30
-    for idx, scenario in enumerate(scenarios_round1):
+
+    # Run scenarios in parallel batches for speed (2 concurrent)
+    idx = 0
+    while idx < len(scenarios_round1):
         if time.time() > hard_ceiling:
             logger.warning("hard pipeline ceiling reached after %d scenarios", idx)
             break
         if time.time() > dialogue_deadline and len(scenario_results) >= MIN_SCENARIOS:
             logger.warning("dialogue stage timeout reached after %d scenarios", idx)
             break
-        scenario_max_turns = scenario.get("stop_after_turns", realtime_max_turns)
-        scenario_max_turns = min(scenario_max_turns, realtime_max_turns)
-        result = await _run_single_scenario(scenario, idx, parsed_task, dsl, llm, scenario_max_turns)
-        scenario_results.append(result)
 
-        coverage_tracker.record_scenario(
-            scenario_id=result["scenario_id"],
-            state_updates=_adapt_state_trace(result.get("state_trace", [])),
-            coverage_targets=scenario.get("coverage_targets", []),
-            violation_rule_ids=result.get("violation_rule_ids", []),
-            satisfied_requirements=result.get("satisfied_requirements", []),
-        )
+        # Determine batch: up to PARALLEL_BATCH_SIZE scenarios
+        batch_end = min(idx + PARALLEL_BATCH_SIZE, len(scenarios_round1))
+        batch = scenarios_round1[idx:batch_end]
 
-        report = coverage_tracker.report().to_dict()
-        yield sse_event("coverage_update", {
-            "state": report["state_coverage"]["ratio"],
-            "edge": report["transition_coverage"]["ratio"],
-            "risk": report["risk_coverage"]["ratio"],
-            "requirement": report["requirement_coverage"]["ratio"],
-            "scenario_id": result["scenario_id"],
-        })
+        # Run batch concurrently
+        tasks = []
+        for bi, scenario in enumerate(batch):
+            scenario_max_turns = scenario.get("stop_after_turns", realtime_max_turns)
+            scenario_max_turns = min(scenario_max_turns, realtime_max_turns)
+            tasks.append(_run_single_scenario(scenario, idx + bi, parsed_task, dsl, llm, scenario_max_turns))
 
-        yield sse_event("scenario_complete", {
-            "scenario_id": result["scenario_id"],
-            "turns": result.get("total_turns", 0),
-            "score": result.get("final_score", 0),
-            "p0_count": result.get("p0_count", 0),
-            "p1_count": result.get("p1_count", 0),
-            "dialogue_history": result.get("dialogue_history", [])[:20],
-            "user_persona": scenario.get("persona", scenario.get("name", "")),
-            "violation_details": [
-                {
-                    "turn": item["turn"],
-                    "agent_utterance": item.get("agent_utterance", ""),
-                    "user_utterance": item.get("user_utterance", ""),
-                    "state": item.get("state", ""),
-                    "violations": item.get("violations", []),
+        batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Process results sequentially for SSE events
+        for bi, (scenario, raw_result) in enumerate(zip(batch, batch_results)):
+            if isinstance(raw_result, Exception):
+                result = {
+                    "scenario_id": scenario.get("name", f"scenario_{idx+bi:03d}"),
+                    "error": str(raw_result), "total_turns": 0, "final_score": 0,
+                    "p0_count": 0, "p1_count": 0, "violation_rule_ids": [],
+                    "satisfied_requirements": [], "state_trace": [], "dimension_scores": {},
                 }
-                for item in result.get("rule_results", [])
-                if not item.get("compliant", True)
-            ][:5],
-        })
-
-    # Gap分析
-    gaps = coverage_tracker.uncovered_targets()
-    remaining_budget = realtime_budget - len(scenarios_round1)
-    round2_planned = 0
-    round2_executed = 0
-    time_until_ceiling = hard_ceiling - time.time()
-
-    if gaps and remaining_budget > 0 and time_until_ceiling > PER_SCENARIO_TIMEOUT_S:
-        yield sse_event("cgads_gaps", {
-            "gap_count": len(gaps),
-            "gaps": gaps[:10],
-        })
-
-        # Round 2: targeted gap-filling
-        gap_scenarios = _risk_first_scenarios(generator.generate_from_coverage_report(gaps))[:remaining_budget]
-        round2_planned = len(gap_scenarios)
-        yield sse_event("cgads_round", {
-            "round": 2,
-            "type": "targeted",
-            "scenario_count": len(gap_scenarios),
-            "scenarios": [{"name": s.get("name", ""), "targets": s.get("coverage_targets", [])} for s in gap_scenarios],
-        })
-
-        round2_executed = 0
-        for idx, scenario in enumerate(gap_scenarios):
-            if time.time() > hard_ceiling:
-                logger.warning("Round2 hard ceiling after %d gap scenarios", idx)
-                break
-            result = await _run_single_scenario(scenario, len(scenarios_round1) + idx, parsed_task, dsl, llm, realtime_max_turns)
+            else:
+                result = raw_result
             scenario_results.append(result)
-            round2_executed += 1
 
             coverage_tracker.record_scenario(
                 scenario_id=result["scenario_id"],
@@ -622,6 +578,98 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
                 ][:5],
             })
 
+        idx += len(batch)
+
+    # Gap分析
+    gaps = coverage_tracker.uncovered_targets()
+    remaining_budget = realtime_budget - len(scenarios_round1)
+    round2_planned = 0
+    round2_executed = 0
+    time_until_ceiling = hard_ceiling - time.time()
+
+    if gaps and remaining_budget > 0 and time_until_ceiling > PER_SCENARIO_TIMEOUT_S:
+        yield sse_event("cgads_gaps", {
+            "gap_count": len(gaps),
+            "gaps": gaps[:10],
+        })
+
+        # Round 2: targeted gap-filling
+        gap_scenarios = _risk_first_scenarios(generator.generate_from_coverage_report(gaps))[:remaining_budget]
+        round2_planned = len(gap_scenarios)
+        yield sse_event("cgads_round", {
+            "round": 2,
+            "type": "targeted",
+            "scenario_count": len(gap_scenarios),
+            "scenarios": [{"name": s.get("name", ""), "targets": s.get("coverage_targets", [])} for s in gap_scenarios],
+        })
+
+        round2_executed = 0
+        r2_idx = 0
+        while r2_idx < len(gap_scenarios):
+            if time.time() > hard_ceiling:
+                logger.warning("Round2 hard ceiling after %d gap scenarios", r2_idx)
+                break
+            # Batch Round2 scenarios too
+            r2_batch_end = min(r2_idx + PARALLEL_BATCH_SIZE, len(gap_scenarios))
+            r2_batch = gap_scenarios[r2_idx:r2_batch_end]
+            r2_tasks = []
+            for bi, scenario in enumerate(r2_batch):
+                sc_max = min(scenario.get("stop_after_turns", realtime_max_turns), realtime_max_turns)
+                r2_tasks.append(_run_single_scenario(scenario, len(scenarios_round1) + r2_idx + bi, parsed_task, dsl, llm, sc_max))
+            r2_batch_results = await asyncio.gather(*r2_tasks, return_exceptions=True)
+
+            for bi, (scenario, raw_result) in enumerate(zip(r2_batch, r2_batch_results)):
+                if isinstance(raw_result, Exception):
+                    result = {
+                        "scenario_id": scenario.get("name", f"gap_{r2_idx+bi:03d}"),
+                        "error": str(raw_result), "total_turns": 0, "final_score": 0,
+                        "p0_count": 0, "p1_count": 0, "violation_rule_ids": [],
+                        "satisfied_requirements": [], "state_trace": [], "dimension_scores": {},
+                    }
+                else:
+                    result = raw_result
+                scenario_results.append(result)
+                round2_executed += 1
+
+                coverage_tracker.record_scenario(
+                    scenario_id=result["scenario_id"],
+                    state_updates=_adapt_state_trace(result.get("state_trace", [])),
+                    coverage_targets=scenario.get("coverage_targets", []),
+                    violation_rule_ids=result.get("violation_rule_ids", []),
+                    satisfied_requirements=result.get("satisfied_requirements", []),
+                )
+
+                report = coverage_tracker.report().to_dict()
+                yield sse_event("coverage_update", {
+                    "state": report["state_coverage"]["ratio"],
+                    "edge": report["transition_coverage"]["ratio"],
+                    "risk": report["risk_coverage"]["ratio"],
+                    "requirement": report["requirement_coverage"]["ratio"],
+                    "scenario_id": result["scenario_id"],
+                })
+
+                yield sse_event("scenario_complete", {
+                    "scenario_id": result["scenario_id"],
+                    "turns": result.get("total_turns", 0),
+                    "score": result.get("final_score", 0),
+                    "p0_count": result.get("p0_count", 0),
+                    "p1_count": result.get("p1_count", 0),
+                    "dialogue_history": result.get("dialogue_history", [])[:20],
+                    "user_persona": scenario.get("persona", scenario.get("name", "")),
+                    "violation_details": [
+                        {
+                            "turn": item["turn"],
+                            "agent_utterance": item.get("agent_utterance", ""),
+                            "user_utterance": item.get("user_utterance", ""),
+                            "state": item.get("state", ""),
+                            "violations": item.get("violations", []),
+                        }
+                        for item in result.get("rule_results", [])
+                        if not item.get("compliant", True)
+                    ][:5],
+                })
+            r2_idx += len(r2_batch)
+
     duration = round(time.time() - t0, 2)
     final_coverage = coverage_tracker.report().to_dict()
     adequacy = not bool(coverage_tracker.uncovered_targets())
@@ -647,7 +695,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         time.time() - pipeline_started,
     )
 
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.01)
 
     # 鈺愨晲鈺?Stage 4+5: 璇勬祴璇勫垎锛堝凡鍦ㄥ満鏅繍琛屼腑瀹屾垚锛夆晲鈺愨晲
     yield sse_event("stage_start", {"stage": "scoring", "label": "璇勬祴璇勫垎"})
@@ -1137,7 +1185,7 @@ async def _run_single_scenario(
                 state_tracker.current_state,
                 time.time() - turn_started,
             )
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.01)
 
         # Judge
         compliant_turns = sum(1 for r in rule_results_all if r["compliant"])
