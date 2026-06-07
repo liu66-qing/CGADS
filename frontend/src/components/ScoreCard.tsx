@@ -146,6 +146,12 @@ export function ScoreCard() {
             <div className="evidence-trails">
               <h4>维度证据链</h4>
               <div className="evidence-grid">
+                {score.scoringBreakdown.evidence.score_formula && (
+                  <div className="evidence-item evidence-formula">
+                    <span className="evidence-label">score_formula</span>
+                    <code className="evidence-value">{score.scoringBreakdown.evidence.score_formula}</code>
+                  </div>
+                )}
                 {score.scoringBreakdown.evidence.flow_state_adherence && (
                   <div className="evidence-item">
                     <span className="evidence-label">流程遵循</span>
@@ -211,9 +217,21 @@ export function ScoreCard() {
         <div className="fix-impact plugin-card">
           <h3>修复→复测闭环</h3>
           <div className="fix-impact-summary">
-            <span className="fix-before">当前 {(score as any).fixImpactEstimate.current_score} 分</span>
-            <span className="fix-arrow">→</span>
-            <span className="fix-after">预计修复后 {(score as any).fixImpactEstimate.estimated_after_fix} 分</span>
+            <div className="fix-score fix-before">
+              <span>Before</span>
+              <strong>{(score as any).fixImpactEstimate.current_score}</strong>
+              <small>当前分</small>
+            </div>
+            <div className="fix-lift-band" aria-label="预期提升区间">
+              <span className="fix-arrow">→</span>
+              <i />
+              <em>预期提升区间</em>
+            </div>
+            <div className="fix-score fix-after">
+              <span>After</span>
+              <strong>{(score as any).fixImpactEstimate.estimated_after_fix}</strong>
+              <small>复测目标分</small>
+            </div>
           </div>
           <ul className="fix-list">
             {(score as any).fixImpactEstimate.fixes?.map((f: any, i: number) => (

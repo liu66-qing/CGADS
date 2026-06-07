@@ -110,6 +110,7 @@ export interface ScoreState {
     final_score: number
     formula: string
     evidence?: {
+      score_formula?: string
       task_completion?: { satisfied_count: number; satisfied_ids: string[] }
       flow_state_adherence?: { visited_states: string[] }
       constraint_compliance?: { violation_count: number; violation_ids: string[] }
