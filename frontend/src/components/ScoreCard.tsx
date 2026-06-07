@@ -62,6 +62,32 @@ export function ScoreCard() {
         <span>评测摘要</span>
         <strong>{summaryText}</strong>
       </div>
+      {(score as any).threeTierJudgment && (
+        <div className="three-tier-judgment plugin-card">
+          <h3>三层判定</h3>
+          <div className="tier-row">
+            <span className="tier-label">数字人表现</span>
+            <span className={`tier-badge tier-${(score as any).threeTierJudgment.digital_human_result.color}`}>
+              {(score as any).threeTierJudgment.digital_human_result.verdict}
+            </span>
+            <span className="tier-reason">{(score as any).threeTierJudgment.digital_human_result.reason}</span>
+          </div>
+          <div className="tier-row">
+            <span className="tier-label">评测充分性</span>
+            <span className={`tier-badge tier-${(score as any).threeTierJudgment.evaluation_adequacy.color}`}>
+              {(score as any).threeTierJudgment.evaluation_adequacy.verdict}
+            </span>
+            <span className="tier-reason">{(score as any).threeTierJudgment.evaluation_adequacy.reason}</span>
+          </div>
+          <div className="tier-row">
+            <span className="tier-label">上线采信</span>
+            <span className={`tier-badge tier-${(score as any).threeTierJudgment.production_credibility.color}`}>
+              {(score as any).threeTierJudgment.production_credibility.verdict}
+            </span>
+            <span className="tier-reason">{(score as any).threeTierJudgment.production_credibility.reason}</span>
+          </div>
+        </div>
+      )}
       <div className="score-layout">
         <div className="score-total plugin-card">
           <ThemeIcon name="score" size={42} />

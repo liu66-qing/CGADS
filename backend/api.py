@@ -324,9 +324,9 @@ DIMENSION_DISPLAY = {
 def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Interleave risk-covering and edge-covering scenarios for balanced coverage.
 
-    Strategy: ensure BOTH risk and edge coverage are maximized in Round1 (budget ~8-12).
-    Use a round-robin merge: take from P0, edge-heavy, P1 buckets in rotation
-    to guarantee both dimensions are well-represented in the first 8-12 positions.
+    Strategy: ensure BOTH risk and edge coverage are maximized in Round1 (budget ~9-12).
+    Round-robin: P0(2) → edge(3) → P1(2) → P0(rest) → edge(rest) → P1(rest) → others.
+    This ensures top 9 has at least 3 edge-heavy + 4 risk scenarios.
     """
     p0_risk = []
     edge_heavy = []  # scenarios with 2+ edge targets
@@ -348,38 +348,31 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
         else:
             others.append(scenario)
 
-    # Round-robin merge: P0(2) → edge(2) → P1(2) → P0(2) → edge(2) → P1(rest) → others
+    # Build result: P0(2) → edge(3) → P1(2) → P0(remaining) → edge(remaining) → P1(remaining) → others
     result = []
     p0_i, edge_i, p1_i = 0, 0, 0
 
-    # Phase 1: first 6 slots — 2 P0, 2 edge-heavy, 2 P1
+    # Phase 1 (positions 1-7): 2 P0 + 3 edge-heavy + 2 P1
     for _ in range(2):
         if p0_i < len(p0_risk):
             result.append(p0_risk[p0_i]); p0_i += 1
-    for _ in range(2):
+    for _ in range(3):
         if edge_i < len(edge_heavy):
             result.append(edge_heavy[edge_i]); edge_i += 1
     for _ in range(2):
         if p1_i < len(p1_risk):
             result.append(p1_risk[p1_i]); p1_i += 1
 
-    # Phase 2: next 6 slots — remaining P0, more edge, more P1
-    for _ in range(2):
+    # Phase 2 (positions 8+): remaining P0, edge, P1 interleaved
+    while p0_i < len(p0_risk) or edge_i < len(edge_heavy) or p1_i < len(p1_risk):
         if p0_i < len(p0_risk):
             result.append(p0_risk[p0_i]); p0_i += 1
-    for _ in range(2):
         if edge_i < len(edge_heavy):
             result.append(edge_heavy[edge_i]); edge_i += 1
-    for _ in range(2):
         if p1_i < len(p1_risk):
             result.append(p1_risk[p1_i]); p1_i += 1
 
-    # Phase 3: everything remaining
-    result.extend(p0_risk[p0_i:])
-    result.extend(edge_heavy[edge_i:])
-    result.extend(p1_risk[p1_i:])
     result.extend(others)
-
     return result
 
 
@@ -798,6 +791,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         "pass_status": pass_status,
         "coverage": final_coverage,
         "adequacy": adequacy,
+        "three_tier_judgment": _build_three_tier_judgment(pass_status, adequacy, final_coverage, total_p0, total_p1),
         "round2_info": round2_info,
         "credibility_boundary": _build_credibility_boundary(final_coverage, adequacy, total_p0, total_p1),
         "dimension_scores": dim_avg,
@@ -911,7 +905,7 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
             "total_count": total_req_count or len(all_satisfied),
             "satisfied_ids": sorted(all_satisfied)[:10],
             "missed_ids": missed_reqs[:10],
-            "score_formula": f"{len(all_satisfied)}/{max(total_req_count, len(all_satisfied))} x 5 = {dim_avg.get('task_completion', 3.0)}",
+            "score_formula": f"各场景需求满足率平均 → {dim_avg.get('task_completion', 3.0)}/5",
         }
         # flow_state_adherence evidence
         all_states = set()
@@ -921,10 +915,11 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
                 all_states.add(t.get("new_state", ""))
                 if t.get("transition"):
                     all_edges_hit.add(t["transition"])
+        total_states = 9  # Standard state count
         evidence["flow_state_adherence"] = {
             "visited_states": sorted(all_states),
             "edges_triggered": sorted(all_edges_hit)[:12],
-            "score_formula": f"{len(all_states)}/9 states x 5 = {dim_avg.get('flow_state_adherence', 3.0)}",
+            "score_formula": f"各场景状态覆盖率平均(全局{len(all_states)}/{total_states}状态) → {dim_avg.get('flow_state_adherence', 3.0)}/5",
         }
         # constraint_compliance evidence
         all_constraint_violations = []
@@ -934,14 +929,14 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
         evidence["constraint_compliance"] = {
             "violation_count": len(set(all_constraint_violations)),
             "violation_ids": sorted(set(all_constraint_violations))[:8],
-            "score_formula": f"5 - {len(set(all_constraint_violations))} violations = {dim_avg.get('constraint_compliance', 5.0)}",
+            "score_formula": f"各场景合规轮次比例平均(违规{len(set(all_constraint_violations))}类) → {dim_avg.get('constraint_compliance', 5.0)}/5",
         }
         # branch_handling evidence
         branch_states = {"refusal_exit", "busy_handling", "faq_handling", "handoff_or_escalation"}
         evidence["branch_handling"] = {
             "branches_hit": sorted(all_states & branch_states),
             "branches_total": sorted(branch_states),
-            "score_formula": f"1 + {len(all_states & branch_states)} branches = {dim_avg.get('branch_handling', 1.0)}",
+            "score_formula": f"各场景命中分支数平均(全局{len(all_states & branch_states)}/4分支) → {dim_avg.get('branch_handling', 1.0)}/5",
         }
         # context_consistency evidence
         repeat_scenarios = [r["scenario_id"] for r in valid if "no_repeat" in r.get("violation_rule_ids", []) + r.get("constraint_violations", [])]
@@ -965,6 +960,49 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
         "final_score": final_score,
         "formula": "总分 = Σ(维度得分/5 × 权重)，受P0/P1封顶",
         "evidence": evidence,
+    }
+
+
+def _build_three_tier_judgment(pass_status: str, adequacy: bool, coverage: dict, p0: int, p1: int) -> dict[str, Any]:
+    """Clearly separate three evaluation conclusions that reviewers often confuse:
+    1. pass_result: Did the digital human pass the behavioral test?
+    2. adequacy: Was the evaluation sufficiently thorough?
+    3. production_credible: Can this report be trusted for production go/no-go decisions?
+    """
+    edge_ratio = coverage.get("transition_coverage", {}).get("ratio", 0)
+    risk_ratio = coverage.get("risk_coverage", {}).get("ratio", 0)
+    req_ratio = coverage.get("requirement_coverage", {}).get("ratio", 0)
+
+    # Tier 1: Digital human behavioral pass/fail
+    if pass_status == "FAIL_P0":
+        tier1 = {"verdict": "不通过", "reason": f"存在{p0}个P0违规（致命合规问题）", "color": "red"}
+    elif pass_status == "CAPPED_P1":
+        tier1 = {"verdict": "有条件通过", "reason": f"存在{p1}个P1违规，需修复后复测", "color": "orange"}
+    elif pass_status == "INADEQUATE":
+        tier1 = {"verdict": "无法判定", "reason": "评测覆盖不足，结论不可靠", "color": "gray"}
+    else:
+        tier1 = {"verdict": "通过", "reason": "无P0/P1违规，基础表现达标", "color": "green"}
+
+    # Tier 2: Evaluation adequacy
+    if adequacy:
+        tier2 = {"verdict": "充分", "reason": "状态/边/风险/需求覆盖均达到阈值", "color": "green"}
+    elif edge_ratio >= 0.5 and risk_ratio >= 0.7:
+        tier2 = {"verdict": "基本充分", "reason": f"边覆盖{edge_ratio:.0%}、风险覆盖{risk_ratio:.0%}，主要路径已测试", "color": "yellow"}
+    else:
+        tier2 = {"verdict": "不充分", "reason": f"边覆盖{edge_ratio:.0%}、风险覆盖{risk_ratio:.0%}，关键路径未验证", "color": "red"}
+
+    # Tier 3: Production credibility
+    if tier1["verdict"] in ("通过", "有条件通过") and tier2["verdict"] in ("充分", "基本充分") and risk_ratio >= 0.7:
+        tier3 = {"verdict": "可作为上线参考", "reason": "评测充分且结论明确，可作为版本发布决策依据", "color": "green"}
+    elif tier2["verdict"] == "不充分":
+        tier3 = {"verdict": "不可采信", "reason": "评测不充分，报告仅供参考，不可作为上线判定", "color": "red"}
+    else:
+        tier3 = {"verdict": "需补充验证", "reason": "建议补充风险场景或边界路径后再做上线决策", "color": "orange"}
+
+    return {
+        "digital_human_result": tier1,
+        "evaluation_adequacy": tier2,
+        "production_credibility": tier3,
     }
 
 
@@ -1346,6 +1384,14 @@ async def _run_single_scenario(
                 {"role": "system", "content": agent_system},
                 *history[-6:]
             ], max_tokens=120, temperature=0.4, timeout_s=4.0, fallback=_fallback)
+
+            # Truncation / abnormal-short detection: replace obviously broken output
+            if len(agent_msg.strip()) <= 2 or agent_msg.strip().endswith(("，", "、", "。但")):
+                # Single char or truncated output — use fallback instead
+                logger.warning("truncated/abnormal agent output detected: '%s', using fallback", agent_msg[:20])
+                violation_ids.append("truncated_output")
+                agent_msg = _fallback  # Replace with coherent state-aware fallback
+
             history.append({"role": "assistant", "content": agent_msg})
 
             # Observe agent reply BEFORE user step — so slots are available for transition matching

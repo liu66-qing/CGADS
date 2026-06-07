@@ -272,6 +272,7 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
           round2Info: data.round2_info ?? undefined,
           scoringBreakdown: data.scoring_breakdown ?? undefined,
           fixImpactEstimate: data.fix_impact_estimate ?? undefined,
+          threeTierJudgment: data.three_tier_judgment ?? undefined,
         },
       }))
     }
