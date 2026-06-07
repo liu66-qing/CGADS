@@ -231,7 +231,15 @@ def _build_skeleton_states(parsed: dict[str, Any]) -> list[State]:
                 ),
                 Transition(
                     to="inform",
+                    when=TransitionCondition(intent="question"),
+                ),
+                Transition(
+                    to="inform",
                     when=TransitionCondition(intent="cooperative"),
+                ),
+                Transition(
+                    to="inform",
+                    when=TransitionCondition(intent="silent_short"),
                 ),
                 Transition(
                     to="handoff_or_escalation",

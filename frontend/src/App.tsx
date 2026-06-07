@@ -51,7 +51,10 @@ export function App() {
 
       <div className="workspace">
         <InputPanel />
-        <PipelineTracker />
+        <details className="pipeline-collapsible" open>
+          <summary>评测进度</summary>
+          <PipelineTracker />
+        </details>
         <div className="main-grid results-primary">
           <ScoreCard />
         </div>

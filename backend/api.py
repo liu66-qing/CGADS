@@ -365,7 +365,7 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 PIPELINE_TIMEOUT_S = 270  # Pipeline must complete within 4.5min
 DIALOGUE_STAGE_TIMEOUT_S = 180  # Dialogue Round1 cap (leave room for Round2)
 PER_SCENARIO_TIMEOUT_S = 35  # Hard cap per scenario (supports 5-6 turns)
-PARALLEL_BATCH_SIZE = 2  # Run 2 scenarios concurrently
+PARALLEL_BATCH_SIZE = 3  # Run 3 scenarios concurrently for speed
 
 
 async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, None]:
@@ -1023,12 +1023,14 @@ def _check_requirements_satisfied(dsl: Any, history: list[dict], state_trace: li
 
 
 def _has_repeated_agent_reply(history: list[dict]) -> bool:
-    """Check if agent repeatedly uses the same reply (quality issue)."""
+    """Check if agent repeatedly uses the same reply (quality issue).
+    Triggers when less than 70% of agent messages are unique.
+    """
     agent_msgs = [m["content"] for m in history if m["role"] == "assistant"]
     if len(agent_msgs) < 3:
         return False
     unique = set(agent_msgs)
-    return len(unique) <= len(agent_msgs) * 0.5
+    return len(unique) < len(agent_msgs) * 0.7
 
 
 def _build_agent_system_prompt(parsed_task: dict) -> str:
@@ -1251,14 +1253,15 @@ async def _run_single_scenario(
         req_satisfaction_ratio = len(satisfied_reqs) / max(len(dsl.atomic_requirements), 1)
         branch_states = {"refusal_exit", "busy_handling", "faq_handling", "handoff_or_escalation"}
         branches_hit = len(visited_states & branch_states)
+        has_repeat_violation = "no_repeat" in violation_ids
 
         dim_scores = {
             "task_completion": min(5, max(1, round(req_satisfaction_ratio * 5))),
             "flow_state_adherence": min(5, max(1, round(state_coverage_ratio * 5))),
             "constraint_compliance": 5 if compliant_turns == total_turns else max(1, 5 - sum(1 for r in rule_results_all if not r["compliant"])),
             "branch_handling": min(5, max(1, 1 + branches_hit)),
-            "context_consistency": 4 if total_turns >= 3 and not _has_repeated_agent_reply(history) else 2,
-            "communication_experience": 4 if total_turns >= 3 else 3,
+            "context_consistency": 2 if has_repeat_violation else (4 if total_turns >= 3 and not _has_repeated_agent_reply(history) else 2),
+            "communication_experience": 3 if has_repeat_violation else (4 if total_turns >= 3 else 3),
         }
 
         p0_count = sum(1 for v in set(violation_ids) if "p0" in v)
