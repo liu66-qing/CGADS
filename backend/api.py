@@ -1429,11 +1429,19 @@ async def _run_single_scenario(
             ], max_tokens=120, temperature=0.4, timeout_s=4.0, fallback=_fallback)
 
             # Truncation / abnormal-short detection: replace obviously broken output
-            if len(agent_msg.strip()) <= 2 or agent_msg.strip().endswith(("，", "、", "。但")):
+            _stripped = agent_msg.strip()
+            if len(_stripped) <= 2 or _stripped.endswith(("，", "、", "。但", "。我", "请您")) or (len(_stripped) < 6 and not _stripped.endswith(("。", "！", "？", "了", "吧", "呢"))):
                 # Single char or truncated output — use fallback instead
                 logger.warning("truncated/abnormal agent output detected: '%s', using fallback", agent_msg[:20])
                 violation_ids.append("truncated_output")
                 agent_msg = _fallback  # Replace with coherent state-aware fallback
+
+            # Repeat detection: if agent reply duplicates any of last 2 assistant msgs, use next fallback
+            _recent_agent = [m["content"] for m in history if m["role"] == "assistant"][-2:]
+            if agent_msg in _recent_agent:
+                logger.info("repeat detected turn=%d, rotating fallback", turn)
+                violation_ids.append("no_repeat")
+                agent_msg = _pool[turn % len(_pool)]  # Rotate to different fallback
 
             history.append({"role": "assistant", "content": agent_msg})
 
@@ -2051,6 +2059,75 @@ async def list_batch_jobs():
             entry["eval_id"] = job.eval_id
         jobs.append(entry)
     return {"jobs": jobs, "total": len(jobs)}
+
+
+class RetestRequest(BaseModel):
+    """Compare a new evaluation against a baseline."""
+    instruction: str
+    baseline_eval_id: str
+    config: dict[str, Any] | None = None
+
+
+@app.post("/api/retest", summary="复测对比", description="修改数字人后复测，与基线评测结果对比")
+async def retest_compare(request: RetestRequest):
+    """Run a new evaluation and compare against baseline.
+
+    Returns before/after score, delta, and specific improvements/regressions.
+    """
+    baseline = _load_eval_result(request.baseline_eval_id)
+    if not baseline:
+        raise HTTPException(status_code=404, detail=f"基线评测 {request.baseline_eval_id} 未找到")
+
+    # Run new evaluation synchronously (simplified — not streaming)
+    job_id = uuid.uuid4().hex[:12]
+    eval_request = EvalRequest(instruction=request.instruction)
+    job = EvaluationJob(job_id, eval_request)
+    EVALUATION_JOBS[job_id] = job
+    job.task = asyncio.create_task(_run_evaluation_job(job))
+    # Wait for completion (with timeout)
+    try:
+        await asyncio.wait_for(job.task, timeout=PIPELINE_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        pass
+
+    after_result = _load_eval_result(job.eval_id) if job.eval_id else None
+    if not after_result:
+        return {"error": "复测未能完成", "job_id": job_id, "status": job.status}
+
+    # Compare
+    before_score = baseline.get("total_score", 0)
+    after_score = after_result.get("total_score", 0)
+    before_p0 = baseline.get("p0_count", 0)
+    after_p0 = after_result.get("p0_count", 0)
+    before_p1 = baseline.get("p1_count", 0)
+    after_p1 = after_result.get("p1_count", 0)
+    before_risk = baseline.get("coverage", {}).get("risk_coverage", {}).get("ratio", 0)
+    after_risk = after_result.get("coverage", {}).get("risk_coverage", {}).get("ratio", 0)
+
+    delta_score = round(after_score - before_score, 1)
+    improvements = []
+    regressions = []
+    if after_p0 < before_p0:
+        improvements.append(f"P0违规减少{before_p0 - after_p0}个")
+    elif after_p0 > before_p0:
+        regressions.append(f"P0违规增加{after_p0 - before_p0}个")
+    if after_p1 < before_p1:
+        improvements.append(f"P1违规减少{before_p1 - after_p1}个")
+    elif after_p1 > before_p1:
+        regressions.append(f"P1违规增加{after_p1 - before_p1}个")
+    if after_risk > before_risk + 0.05:
+        improvements.append(f"风险覆盖提升{(after_risk - before_risk)*100:.0f}%")
+
+    return {
+        "before": {"score": before_score, "p0": before_p0, "p1": before_p1, "risk_coverage": round(before_risk, 2)},
+        "after": {"score": after_score, "p0": after_p0, "p1": after_p1, "risk_coverage": round(after_risk, 2)},
+        "delta_score": delta_score,
+        "improvements": improvements,
+        "regressions": regressions,
+        "diff_summary": f"{'+'if delta_score>=0 else ''}{delta_score}分, P0:{after_p0}({after_p0-before_p0:+d}), P1:{after_p1}({after_p1-before_p1:+d})",
+        "after_eval_id": job.eval_id,
+        "after_job_id": job_id,
+    }
 
 
 # ============================================================

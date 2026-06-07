@@ -112,7 +112,7 @@ export interface ScoreState {
     business_summary?: string
     evidence?: {
       score_formula?: string
-      task_completion?: { satisfied_count: number; satisfied_ids: string[] }
+      task_completion?: { satisfied_count: number; total_count?: number; satisfied_ids: string[] }
       flow_state_adherence?: { visited_states: string[] }
       constraint_compliance?: { violation_count: number; violation_ids: string[] }
       branch_handling?: { branches_hit: string[] }

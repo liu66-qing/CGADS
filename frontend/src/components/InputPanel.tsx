@@ -239,6 +239,24 @@ POST /api/compare
               )}
             </div>
           </details>
+
+          <details className="api-docs-panel retest-panel">
+            <summary>复测对比（修改prompt后验证效果）</summary>
+            <div className="api-docs-content">
+              <div className="api-section">
+                <h4>一键复测</h4>
+                <p className="api-desc">修改数字人prompt后，提交同一任务指令与上次评测ID进行对比，系统自动计算分数变化、违规变化和覆盖变化。</p>
+                <pre className="api-code">{`POST /api/retest
+{ "instruction": "...",
+  "baseline_eval_id": "eval_xxx" }
+→ { "before": {"score": 48.5, "p0": 0, "p1": 2},
+    "after":  {"score": 67.2, "p0": 0, "p1": 1},
+    "delta_score": +18.7,
+    "improvements": ["P1违规减少1个", "风险覆盖提升13%"],
+    "diff_summary": "+18.7分, P0:0(+0), P1:1(-1)" }`}</pre>
+              </div>
+            </div>
+          </details>
         </form>
       )}
     </section>

@@ -173,42 +173,42 @@ export function ScoreCard() {
           </table>
           {score.scoringBreakdown.evidence && (
             <div className="evidence-trails">
-              <h4>维度证据链</h4>
+              <h4>维度证据链（业务解读）</h4>
               <div className="evidence-grid">
-                {score.scoringBreakdown.evidence.score_formula && (
-                  <div className="evidence-item evidence-formula">
-                    <span className="evidence-label">score_formula</span>
-                    <code className="evidence-value">{score.scoringBreakdown.evidence.score_formula}</code>
+                {score.scoringBreakdown.evidence.task_completion && (
+                  <div className="evidence-item">
+                    <span className="evidence-label">任务完成度</span>
+                    <span className="evidence-value">数字人完成了 {score.scoringBreakdown.evidence.task_completion.satisfied_count} 项业务需求{score.scoringBreakdown.evidence.task_completion.total_count ? ` / 共${score.scoringBreakdown.evidence.task_completion.total_count}项` : ''}</span>
                   </div>
                 )}
                 {score.scoringBreakdown.evidence.flow_state_adherence && (
                   <div className="evidence-item">
                     <span className="evidence-label">流程遵循</span>
-                    <span className="evidence-value">覆盖状态: {score.scoringBreakdown.evidence.flow_state_adherence.visited_states?.join(', ')}</span>
-                  </div>
-                )}
-                {score.scoringBreakdown.evidence.task_completion && (
-                  <div className="evidence-item">
-                    <span className="evidence-label">任务完成</span>
-                    <span className="evidence-value">满足 {score.scoringBreakdown.evidence.task_completion.satisfied_count} 项需求</span>
-                  </div>
-                )}
-                {score.scoringBreakdown.evidence.branch_handling && (
-                  <div className="evidence-item">
-                    <span className="evidence-label">分支处理</span>
-                    <span className="evidence-value">命中: {score.scoringBreakdown.evidence.branch_handling.branches_hit?.join(', ') || '无'}</span>
+                    <span className="evidence-value">走过 {score.scoringBreakdown.evidence.flow_state_adherence.visited_states?.length || 0} 个流程节点（{score.scoringBreakdown.evidence.flow_state_adherence.visited_states?.join('→') || '无'}）</span>
                   </div>
                 )}
                 {score.scoringBreakdown.evidence.constraint_compliance && (
                   <div className="evidence-item">
                     <span className="evidence-label">约束合规</span>
-                    <span className="evidence-value">违规 {score.scoringBreakdown.evidence.constraint_compliance.violation_count} 项: {score.scoringBreakdown.evidence.constraint_compliance.violation_ids?.join(', ') || '无'}</span>
+                    <span className="evidence-value">{score.scoringBreakdown.evidence.constraint_compliance.violation_count === 0 ? '未触发任何约束违规' : `触发 ${score.scoringBreakdown.evidence.constraint_compliance.violation_count} 类违规：${score.scoringBreakdown.evidence.constraint_compliance.violation_ids?.join('、') || ''}`}</span>
+                  </div>
+                )}
+                {score.scoringBreakdown.evidence.branch_handling && (
+                  <div className="evidence-item">
+                    <span className="evidence-label">分支处理</span>
+                    <span className="evidence-value">{score.scoringBreakdown.evidence.branch_handling.branches_hit?.length ? `成功处理了：${score.scoringBreakdown.evidence.branch_handling.branches_hit.join('、')}` : '未触发任何分支（拒绝、忙碌、FAQ、转人工）'}</span>
                   </div>
                 )}
                 {(score.scoringBreakdown.evidence.context_consistency?.repeat_violation_in?.length ?? 0) > 0 && (
                   <div className="evidence-item">
                     <span className="evidence-label">上下文一致</span>
-                    <span className="evidence-value">重复违规场景: {score.scoringBreakdown.evidence.context_consistency!.repeat_violation_in!.join(', ')}</span>
+                    <span className="evidence-value">在以下场景中检测到重复话术：{score.scoringBreakdown.evidence.context_consistency!.repeat_violation_in!.join('、')}</span>
+                  </div>
+                )}
+                {score.scoringBreakdown.evidence.communication_experience && (
+                  <div className="evidence-item">
+                    <span className="evidence-label">沟通体验</span>
+                    <span className="evidence-value">平均 {score.scoringBreakdown.evidence.communication_experience.avg_turns} 轮对话完成，覆盖 {score.scoringBreakdown.evidence.communication_experience.scenario_count} 个场景</span>
                   </div>
                 )}
               </div>

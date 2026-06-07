@@ -188,6 +188,26 @@ CONFIRM_THEN_REFUSE_TEMPLATE = {
     "coverage_targets": ["edge:opening->inform", "edge:inform->intent_confirm", "edge:intent_confirm->refusal_exit"],
 }
 
+# 质疑后拒绝：auth_or_trust → refusal_exit
+SKEPTICAL_THEN_REFUSE_TEMPLATE = {
+    "name": "质疑后拒绝型-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你第1轮质疑对方身份'你怎么证明你是官方的'，第2轮无论对方怎么解释，你直接说'不可信别打了/挂了'拒绝",
+    "intent_distribution": {"skeptical_authenticity": 0.5, "refusal": 0.5},
+    "stop_after_turns": 4,
+    "coverage_targets": ["edge:opening->auth_or_trust", "edge:auth_or_trust->refusal_exit"],
+}
+
+# FAQ后确认：faq_handling → intent_confirm
+FAQ_THEN_CONFIRM_TEMPLATE = {
+    "name": "问后确认型-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你先问几个问题进入FAQ阶段，听完解答后说'好明白了/行我知道了'转为确认配合",
+    "intent_distribution": {"question": 0.4, "cooperative": 0.5, "refusal": 0.1},
+    "stop_after_turns": 6,
+    "coverage_targets": ["edge:inform->faq_handling", "edge:faq_handling->intent_confirm", "edge:intent_confirm->closing"],
+}
+
 
 def _infer_role_info(dsl: TaskDSL) -> dict[str, str]:
     """从 DSL 推断角色与目标对象。"""
@@ -272,7 +292,8 @@ def generate_base_scenarios(dsl: TaskDSL) -> list[dict[str, Any]]:
         scenarios.append(s)
 
     # 边覆盖专项（触发难达路径）
-    for tmpl in [LATE_REFUSAL_TEMPLATE, FAQ_THEN_REFUSE_TEMPLATE, BUSY_THEN_COOPERATE_TEMPLATE, CONFIRM_THEN_REFUSE_TEMPLATE]:
+    for tmpl in [LATE_REFUSAL_TEMPLATE, FAQ_THEN_REFUSE_TEMPLATE, BUSY_THEN_COOPERATE_TEMPLATE,
+                 CONFIRM_THEN_REFUSE_TEMPLATE, SKEPTICAL_THEN_REFUSE_TEMPLATE, FAQ_THEN_CONFIRM_TEMPLATE]:
         s = dict(tmpl)
         s["name"] = s["name"].format(suffix="edge")
         s["persona"] = s["persona"].format(**info)
