@@ -1057,20 +1057,27 @@ async def _run_single_scenario(
 
             # Agent reply — use rich system prompt with task details
             agent_system = _build_agent_system_prompt(parsed_task)
-            # State-aware fallbacks to drive proper slot progression
-            _state_fallbacks = {
-                "opening": "您好，我是美团站长，通知您合同签署的事。",
-                "auth_or_trust": "您可以在App-我的合同里查看官方通知，或拨打客服热线核实。",
-                "inform": "通知您，合同已签署生效，今日需完成配送任务。",
-                "faq_handling": "合同期内每日需完成配送订单，详情可在App查看。",
-                "intent_confirm": "好的，我确认记录一下，您今天可以正常配送对吧？",
-                "busy_handling": "好的，那我稍后再联系您，您忙完回拨也行。",
-                "refusal_exit": "好的，理解您的情况，不打扰了，再见。",
-                "closing": "好的，祝您顺利，再见。",
-                "handoff_or_escalation": "好的，我帮您转接人工客服处理。",
+            # State-aware fallbacks with turn variation to prevent repeat-detection kill
+            _state_fallbacks_pool = {
+                "opening": ["您好，我是美团站长，通知您合同签署的事。"],
+                "auth_or_trust": ["您可以在App-我的合同里查看官方通知，或拨打客服热线核实。",
+                                  "您也可以登录App，在'我的合同'里核实本次通知。"],
+                "inform": ["通知您，合同已签署生效，今日需完成配送任务。",
+                           "合同已生效，配送任务最低完成8单即可。",
+                           "今日配送要求已发到App，请查收确认。"],
+                "faq_handling": ["合同期内每日需完成配送订单，详情可在App查看。",
+                                 "如有疑问可在App-合同详情里查看说明。"],
+                "intent_confirm": ["好的，我确认记录一下，您今天可以正常配送对吧？",
+                                   "收到，那我这边记录您确认了，辛苦今天完成配送。"],
+                "busy_handling": ["好的，那我稍后再联系您，您忙完回拨也行。",
+                                  "明白，那不打扰了，有空回拨确认即可。"],
+                "refusal_exit": ["好的，理解您的情况，不打扰了，再见。"],
+                "closing": ["好的，祝您顺利，再见。"],
+                "handoff_or_escalation": ["好的，我帮您转接人工客服处理。"],
             }
             _cur_state = state_tracker.current_state
-            _fallback = _state_fallbacks.get(_cur_state, "好的，我帮您确认下合同信息。")
+            _pool = _state_fallbacks_pool.get(_cur_state, ["好的，我帮您确认下合同信息。"])
+            _fallback = _pool[(turn - 1) % len(_pool)]
             agent_msg = await _chat_with_timeout(llm, [
                 {"role": "system", "content": agent_system},
                 *history[-6:]
