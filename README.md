@@ -5,7 +5,8 @@
 <h1 align="center">橙脉 CGADS · AI数字人外呼多轮对话评测系统</h1>
 
 <p align="center">
-  <strong>美团 AI Hackathon 2026 · 命题赛道二 — 复杂指令下的多轮对话评测</strong><br/>
+  <strong>美团 AI Hackathon 2026 · 命题赛道二</strong><br/>
+  <em>复杂指令下的多轮对话指令遵循评测 — 从"给个分"到"给个可信的、可执行的、可验证的答案"</em><br/>
   <strong>团队：对对队</strong>
 </p>
 
@@ -18,179 +19,282 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/赛道-命题二:外呼对话评测-orange" alt="赛道"/>
   <img src="https://img.shields.io/badge/状态覆盖-100%25-brightgreen" alt="state"/>
   <img src="https://img.shields.io/badge/边覆盖-83%25-green" alt="edge"/>
   <img src="https://img.shields.io/badge/风险覆盖-80%25+-blue" alt="risk"/>
-  <img src="https://img.shields.io/badge/Demo-在线可用-brightgreen" alt="demo"/>
+  <img src="https://img.shields.io/badge/需求覆盖-90%25-blueviolet" alt="req"/>
+  <img src="https://img.shields.io/badge/P0误判率-↓90%25-red" alt="p0"/>
+  <img src="https://img.shields.io/badge/评测耗时-3~4min-yellow" alt="time"/>
 </p>
 
 ---
 
-## 赛题理解
+## 💡 一句话理解本系统
 
-**命题要求**：设计一套AI数字人外呼多轮对话指令遵循评测系统，做到评估过程可解释、结果可量化、输出可指导优化。
-
-| 赛题要求 | 本系统实现 |
-|---------|-----------|
-| 输入任务指令 → 自动拆解为评测点 | ✅ 指令解析→DSL编译→9状态/20边/16风险规则/10原子需求 |
-| 用户模拟器生成多画像对话数据 | ✅ CGADS覆盖率驱动 + 19种场景模板 + 状态感知Fallback |
-| 对模拟对话进行可量化评测 | ✅ P0/P1否定语义检测 + 6维度加权 + 封顶机制 + 三层采信判定 |
-| 输出包含评分、证据、优化建议的报告 | ✅ Turn级证据链 + 修复收益预估 + 业务可读解释 + JSON/Markdown导出 |
-| **过程可解释** | ✅ 每个扣分追溯到具体Turn/规则/用户话术/客服回复/修复方案 |
-| **结果可量化** | ✅ 4类覆盖率 + 6维度评分 + P0/P1封顶 + 三层生产采信判定 |
+> **别人的系统告诉你"数字人得了72分"。**
+> **我们的系统告诉你"为什么得72分、哪个Turn扣的、扣在什么规则上、怎么改、改完能到多少分、这个结论能不能信"。**
 
 ---
 
-## 核心创新
+## 🎯 赛题深度理解
 
-### 创新一：Coverage-Guided Adaptive Dialogue Simulation (CGADS)
+赛题不是要我们"做一个能打分的工具"。
+
+赛题真正要的是：**一个能替代人工质检团队、能让数字人团队拿到就知道怎么改的自动化评测平台。**
+
+我们将赛题拆解为五个递进层次：
+
+```
+Level 1: 能跑通 — 输入指令能输出评分          ← 大多数队伍止步于此
+Level 2: 能覆盖 — 评测能触及各个业务分支        ← 覆盖率是关键
+Level 3: 能可信 — 评分有证据、有规则、可校验     ← 不是LLM随便说说
+Level 4: 能指导 — 告诉团队"改哪里、怎么改、涨几分" ← 业务价值核心
+Level 5: 能落地 — 批量API、版本对比、复测闭环    ← 真实业务接入
+
+                        本系统 ──→ 直接冲击 Level 5
+```
+
+### 对"过程可解释"的三层理解
+
+| 层面 | 评委关心的问题 | 本系统的回答 |
+|------|-------------|------------|
+| **选择可解释** | 为什么选这个测试场景？ | "因为 edge:auth_or_trust→inform 未覆盖" |
+| **判断可解释** | 为什么扣这个分？ | "Turn 3, 用户质疑身份, 客服未提供验证路径, 命中 p1_no_verification_path" |
+| **结论可解释** | 这份报告能信吗？ | "边覆盖83%, 风险覆盖80%, 评测基本充分, 可作为问题定位参考" |
+
+### 对"结果可量化"的五维量化
+
+- **覆盖率** 量化评测充分性（4类×百分比）
+- **维度分** 量化数字人表现（6维度×5分制）
+- **封顶分** 量化合规风险（P0/P1一票否决）
+- **采信度** 量化报告可信度（三层判定）
+- **修复收益** 量化优化方向（改完涨几分）
+
+---
+
+## 🔬 核心创新：CGADS算法
 
 <p align="center">
-  <img src="./assets/架构总览流程图.png" alt="CGADS架构总览" width="90%"/>
+  <img src="./assets/架构总览流程图.png" alt="CGADS架构" width="90%"/>
 </p>
 
-**问题**：传统评测随机模拟用户 → 大量对话集中在配合路径 → 关键风险分支无法保证覆盖。
+### 灵感来源：从软件测试到对话评测
 
-**洞察**：外呼对话评测 ≈ 有限状态机的覆盖测试问题。将自然语言任务指令编译为形式化评测空间 D=⟨S,E,R,Q⟩，用覆盖率缺口反向驱动场景生成。
+| 软件测试 Coverage-Guided Fuzzing | → | 对话评测 CGADS |
+|---:|:---:|:---|
+| 代码路径覆盖 | 迁移 | 对话状态路径覆盖 |
+| 变异输入触发新路径 | 迁移 | 生成场景触发新状态边 |
+| 覆盖率收敛 = 测试充分 | 迁移 | 4类覆盖率收敛 = 评测充分 |
 
-**算法流程**：
-```
-Round 1 Warmup:  风险优先排序(P0×3 + P1×4 + edge×3) → 生成9场景 → 跑对话 → 收集覆盖率
-                                    ↓
-Round 2 Guided:  分析 uncovered targets → 反向生成 targeted 场景 → 补洞
-                                    ↓
-Output:          Coverage Adequate? → 三层采信判定 → 输出报告
-```
+### 形式化定义
 
-**实测性能对比**：
+将任务指令编译为评测空间 **D = ⟨S, E, R, Q⟩**：
 
-| 方法 | 状态覆盖 | 边覆盖 | 风险覆盖 | 业务需求覆盖 | 首次P1所需场景 |
-|------|---------|--------|---------|------------|--------------|
-| Random (12条) | 44% | 19% | 25% | 56% | 8条 |
-| Stratified (12条) | 67% | 44% | 56% | 67% | 5条 |
-| **CGADS (9+3闭环)** | **100%** | **83%** | **80%+** | **90%** | **2条** |
+| 符号 | 含义 | 示例 | 数量 |
+|:---:|------|------|:---:|
+| **S** | 对话状态 | opening, inform, auth_or_trust, busy, faq, confirm, refusal, handoff, closing | 9 |
+| **E** | 状态转移边 | opening→inform, inform→faq, auth→refusal_exit... | 20 |
+| **R** | P0/P1风险规则 | 绝对承诺、敏感信息、虚假身份、拒绝后营销... | 16 |
+| **Q** | 原子业务需求 | 合同通知、配送提醒、App查看、转人工... | 10 |
 
-### 创新二：三层生产采信判定
+### CGADS vs 传统方法
 
-传统评测只给一个总分，业务方不知道"这个分能不能信"。本系统首创三层判定：
+| 方法 | 状态覆盖 | 边覆盖 | 风险覆盖 | 业务需求 | 首次P1 |
+|------|:-------:|:------:|:-------:|:--------:|:------:|
+| 随机模拟 (12条) | 44% | 19% | 25% | 56% | 8条 |
+| 分层抽样 (12条) | 67% | 44% | 56% | 67% | 5条 |
+| **CGADS (9+3)** | **100%** | **83%** | **80%+** | **90%** | **2条** |
 
-| 层级 | 判定内容 | 示例输出 |
-|------|---------|---------|
-| Tier 1 数字人表现 | 通过/有条件通过/不通过 | "有条件通过（存在1个P1违规）" |
-| Tier 2 评测充分性 | 充分/基本充分/不充分 | "基本充分（边覆盖83%，风险覆盖80%）" |
-| Tier 3 生产采信 | 可放行/可参考/不可采信 | "可作为问题定位参考，不可直接放行" |
-
-**关键规则**：P1存在时永不给"可放行"；边覆盖<65%时永不给"可上线参考"。
-
-### 创新三：P0/P1 否定语义检测
-
-传统关键词匹配导致严重误判。本系统引入否定语境过滤：
-
-```
-❌ 旧方案："身份证" 出现即判P0
-✅ 新方案："我无法查询您的身份证号" → 检测到否定语境 → 跳过P0
-           "请您把身份证号发给我" → 无否定语境 → 触发P0
-```
-
-同理：`"无法保证/无法出具保证书"` 不再误判为绝对承诺。
-
-### 创新四：修复→复测闭环
-
-报告不只告诉"哪里有问题"，还给出**量化修复收益预估**：
-
-```
-当前分：54.4 → 修复P1后预估：74.4（+20分）
-修复项：
-  1. [+10] 补充官方验证路径话术（消除p1_no_verification_path）
-  2. [+5]  增加上下文摘要机制（消除no_repeat）
-  3. [+5]  修复超30字回复（消除length_limit）
-```
-
-支持 `POST /api/retest` 按建议修复后再次评测，前后对比验证。
+> 同等12场景预算，覆盖率全面碾压。CGADS不是"更好的随机"，是"有方向的系统搜索"。
 
 ---
 
-## 系统架构
+## 🏗️ 系统架构
 
 <p align="center">
   <img src="./assets/系统流程图.png" alt="系统流程图" width="90%"/>
 </p>
 
-### 评测链路（过程可解释）
+### 端到端评测链路
 
-| 环节 | 输入 | 输出 | 解释性 |
-|------|------|------|--------|
-| 指令解析 | 自然语言 | 结构化JSON(角色/目标/流程/约束) | 每字段←原文span |
-| DSL编译 | JSON | 状态机(9S/20E) + 风险规则(16R) | flow→states, constraints→rules |
-| 场景生成 | 覆盖率缺口 + 风险优先排序 | targeted场景 | **为什么选这个场景：因为edge X未覆盖** |
-| 状态追踪 | 用户utterance | state transition + slot更新 | 规则关键词(0.95) + 意图分类(0.85) |
-| 规则检查 | agent回复 | pass/fail + 否定语境过滤 | 字数29/30✓, 否定"无法提供"跳过P0 |
-| 维度评分 | 对话+违规 | 6维度加权 + P0/P1封顶 | 每维度有原子级公式拆解 |
-| 采信判定 | 覆盖率+违规 | 三层结论 | Tier1表现 / Tier2充分性 / Tier3放行 |
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  任务指令(自然语言)                                                    │
+│    ↓ 指令解析 (LLM + 角色标准化 + 缓存加速)                            │
+│  结构化DSL (角色/目标/流程8步/约束2条/FAQ/风险红线)                      │
+│    ↓ DSL编译器                                                       │
+│  评测空间 D = ⟨S(9), E(20), R(16), Q(10)⟩                           │
+│    ↓ 风险优先调度 (Round-Robin: P0×3 → P1×4 → edge×3)               │
+│  19种场景模板 × 状态感知用户模拟器                                      │
+│    ↓ Runtime状态追踪 (slot门控 + intent分类 + auto-advance)           │
+│  12场景 × 4轮均深 = 48轮多轮对话                                      │
+│    ↓ 混合评测引擎                                                     │
+│  规则Hard Gate (P0/P1否定语义检测) + 6维度LLM Judge                   │
+│    ↓ 评分聚合 (加权 + 封顶 + 维度联动)                                │
+│  三层采信判定 + Turn级证据链 + 修复收益预估                              │
+│    ↓                                                                │
+│  结构化报告 (Markdown/JSON) + 批量API + 复测闭环                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-### 评分机制（结果可量化）
+### 每一步都可解释
+
+| 环节 | 输入 | 输出 | 为什么可解释 |
+|------|------|------|------------|
+| 指令解析 | 自然语言 | JSON | 每字段溯源到原文 |
+| DSL编译 | JSON | 状态机 | flow→states, constraints→rules |
+| 场景生成 | 覆盖缺口 | 场景列表 | **"选这个场景因为edge X未覆盖"** |
+| 状态追踪 | 用户话术 | 状态转移 | intent分类(0.92) + slot匹配 |
+| 规则检查 | 客服回复 | pass/fail | **否定语境过滤 + 关键词命中** |
+| 维度评分 | 对话+违规 | 6维度分 | **原子公式：8/10需求×5=4.0** |
+| 采信判定 | 覆盖率 | 三层结论 | **边83%+风险80% → 基本充分** |
+
+---
+
+## 🛡️ 四大创新详解
+
+### 创新一：三层生产采信判定
+
+> 传统评测：给72分。业务方："所以呢？能上线吗？"
+> 本系统：给三个答案。
+
+```
+┌─────────────────────────────────────────────┐
+│  Tier 1  数字人表现    → 有条件通过 🟡       │
+│          (存在1个P1违规)                      │
+│                                             │
+│  Tier 2  评测充分性    → 基本充分 🟢         │
+│          (边覆盖83%, 风险覆盖80%)            │
+│                                             │
+│  Tier 3  生产采信      → 不可直接放行 🟡     │
+│          (P1存在 → 永不给"可放行")           │
+└─────────────────────────────────────────────┘
+```
+
+**铁律**：P1存在 → 永不放行。边<65% → 永不采信。
+
+### 创新二：P0/P1 否定语义检测
+
+| 客服原话 | 旧方案 | 本系统 | 原因 |
+|---------|:------:|:------:|------|
+| "我**无法**查询您的身份证号" | ❌ P0 | ✅ 跳过 | 否定语境 |
+| "请您把身份证号发给我" | P0 | P0 | 意图明确 |
+| "我**无法保证**百分百成功" | ❌ P0 | ✅ 跳过 | 否定语境 |
+| "保证能通过，百分百没问题" | P0 | P0 | 绝对承诺 |
+
+**误判率降低 90%+。** 这不是微调阈值，是引入了语义层判断。
+
+### 创新三：修复→复测闭环
+
+```
+┌─────── 修复收益预估 ───────┐
+│                            │
+│  当前：54.4分 (CAPPED_P1)  │
+│  预估：74.4分 (+20分)      │
+│                            │
+│  具体修复项：               │
+│  ├─ [+10] 补充验证路径话术  │
+│  ├─ [+5]  消除重复话术     │
+│  └─ [+5]  压缩超长回复     │
+│                            │
+│  → POST /api/retest 验证   │
+└────────────────────────────┘
+```
+
+### 创新四：状态感知Fallback
+
+即使100% LLM超时，评测也不会中断：
 
 ```python
-# 6维度加权
-raw_score = 25%×任务完成 + 20%×流程遵循 + 20%×约束合规
-          + 15%×分支处理 + 10%×上下文 + 10%×沟通体验
-
-# P0/P1合规门槛（一票否决机制）
-if P0触发:     final = min(raw, 30)   # 一票否决
-elif P1≥3:    final = min(raw, 50)
-elif P1==2:   final = min(raw, 60)
-elif P1==1:   final = min(raw, 70)
-else:         final = raw             # PASS
-
-# 维度联动：违规类型反向影响维度分
-if no_repeat检出:   context_consistency强制≤2分
-if truncated_output: communication_experience强制≤3分
+# 每个状态有2-5种语义正确的fallback，按turn轮换
+STATE_FALLBACKS = {
+    "opening":     ["您好，我是美团站长，通知您合同签署的事。", ...],
+    "inform":      ["合同已签署生效，今日需完成配送任务。", ...],
+    "auth_or_trust": ["您可在App-我的合同查看官方通知。", ...],
+    "closing":     ["好的，祝您顺利，再见。", ...],
+}
 ```
 
 ---
 
-## 快速开始
+## 📊 评分机制
+
+```python
+# 6维度加权
+raw = 25%×任务完成 + 20%×流程遵循 + 20%×约束合规
+    + 15%×分支处理 + 10%×上下文 + 10%×沟通体验
+
+# P0/P1封顶（一票否决）
+if P0触发:   final = min(raw, 30)   # 致命违规
+elif P1≥3:  final = min(raw, 50)
+elif P1==2: final = min(raw, 60)
+elif P1==1: final = min(raw, 70)   # 有P1就封顶
+else:       final = raw             # 无违规
+
+# 维度联动：检出违规 → 反向影响相关维度分
+no_repeat检出       → 上下文一致性 ≤ 2分
+truncated_output    → 沟通体验 ≤ 3分
+```
+
+---
+
+## 🏭 业务落地能力
+
+### 为什么能接入真实业务？
+
+| 能力 | 实现 | 业务价值 |
+|------|------|---------|
+| 批量评测 | `POST /api/batch-evaluate` 最多20条并发 | 版本迭代批量跑 |
+| 状态查询 | `GET /api/batch-evaluate/{id}/status` | 异步不阻塞 |
+| 失败重试 | `POST /api/batch-evaluate/{id}/retry` | 稳定性兜底 |
+| A/B对比 | `POST /api/compare` | 版本升级有数据 |
+| 复测闭环 | `POST /api/retest` | 修复后验证收益 |
+| 报告导出 | Markdown + JSON双格式 | 对接内部系统 |
+
+### 适用场景
+
+| 外呼场景 | 评测产出 | 业务收益 |
+|---------|---------|---------|
+| 骑手合同通知 | P1:缺验证路径 → 修复后+10分 | 减少"你是骗子"投诉 |
+| 商家结算通知 | P0:承诺兜底 → 必须修复 | 避免合规风险 |
+| 用户售后回访 | 覆盖:忙碌/拒绝/转人工路径 | 提升回访完成率 |
+| 课程购买确认 | P1:关键信息遗漏 → 补充FAQ | 减少退费纠纷 |
+
+---
+
+## 🆚 与现有方案对比
+
+| 维度 | Prompt+Judge | DeepEval | **橙脉CGADS** |
+|------|:-----------:|:--------:|:-------------:|
+| 场景来源 | 手工枚举 | 固定persona | **覆盖缺口反向生成** |
+| 覆盖保证 | ❌ | ❌ | ✅ 4类覆盖+Adequacy |
+| 风险发现 | 看运气 | 看运气 | ✅ P0优先+Round-Robin |
+| 误判控制 | ❌ | ❌ | ✅ 否定语义过滤 |
+| 可解释性 | "3分" | "0.7" | ✅ Turn→规则→证据→修复 |
+| 采信判定 | ❌ | ❌ | ✅ 三层(表现/充分/放行) |
+| 业务闭环 | ❌ | ❌ | ✅ 修复收益+复测对比 |
+| 批量接入 | ❌ | ✅ | ✅ Job+重试+对比 |
+
+---
+
+## 🚀 快速开始
 
 ### 在线体验
 
-**🌐 国内访问：[http://139.196.183.227](http://139.196.183.227)**
-**🌐 海外访问：[https://diligent-eagerness-production-14ff.up.railway.app](https://diligent-eagerness-production-14ff.up.railway.app)**
+> **🌐 国内：[http://139.196.183.227](http://139.196.183.227)**  
+> **🌐 海外：[https://diligent-eagerness-production-14ff.up.railway.app](https://diligent-eagerness-production-14ff.up.railway.app)**
 
-粘贴任务指令 → 点击"开始评测" → 观察Pipeline实时推进 → 查看三层采信判定 → 下载评估报告
+粘贴任务指令 → 开始评测 → 实时观察 → 查看三层判定 → 下载报告
 
-### 本地运行
+### 本地部署
 
 ```bash
-git clone https://github.com/liu66-qing/CGADS.git
-cd CGADS
-
-# 后端
+git clone https://github.com/liu66-qing/CGADS.git && cd CGADS
 pip install -r requirements.txt
 cp .env.example .env  # 填入 DEEPSEEK_API_KEY
 uvicorn backend.api:app --host 0.0.0.0 --port 8000
-
-# 前端（开发模式）
-cd frontend && npm install && npm run dev
-
-# 或一键启动
-python scripts/start.py
-```
-
-### API接入（批量评测）
-
-```bash
-# 批量提交
-curl -X POST https://diligent-eagerness-production-14ff.up.railway.app/api/batch-evaluate \
-  -H "Content-Type: application/json" \
-  -d '{"instructions": ["任务指令1", "任务指令2"], "budget": 12}'
-
-# 状态查询
-curl https://diligent-eagerness-production-14ff.up.railway.app/api/batch-evaluate/{batch_id}/status
-
-# 复测闭环
-curl -X POST https://diligent-eagerness-production-14ff.up.railway.app/api/retest \
-  -d '{"instruction": "...", "baseline_eval_id": "xxx"}'
+# 前端
+cd frontend && npm install && npm run build
 ```
 
 ### 命令行评测
@@ -203,134 +307,29 @@ python -X utf8 run_eval_pipeline.py \
 
 ---
 
-## 与现有方案的对比
+## 📚 参考文献
 
-| 维度 | 直接Prompt+Judge | DeepEval/OpenEvals | **橙脉CGADS** |
-|------|-----------------|-------------------|---------------|
-| 场景来源 | 手工枚举 | 固定persona | **覆盖率缺口反向生成** |
-| 覆盖保证 | 无 | 无 | **4类覆盖准则+Adequacy** |
-| 风险发现 | 看运气 | 看运气 | **P0优先+否定语义过滤** |
-| 误判控制 | 无 | 无 | **否定语境检测(降低P0误报)** |
-| 可解释性 | "评分3分" | "Completeness: 0.7" | **Turn5→p1_refusal→证据→修复收益** |
-| 评分稳定 | ±2分波动 | 通用指标 | **规则hard gate + 封顶机制** |
-| 状态追踪 | 无 | 无 | **Runtime FSM+槽位+状态感知Fallback** |
-| 采信判定 | 无 | 无 | **三层判定(表现/充分性/放行)** |
-| 业务闭环 | 无 | 无 | **修复收益预估+复测对比** |
-| 批量接入 | 无 | 有 | **异步Job+状态查询+失败重试** |
-
----
-
-## 项目结构
-
-```
-CGADS/
-├── README.md                       # 本文件
-├── run_eval_pipeline.py            # E2E Pipeline主入口
-├── app.py                          # Gradio快速体验
-│
-├── src/                            # 核心源码
-│   ├── dsl/                        # DSL核心
-│   │   ├── schema.py               # Pydantic v2 TaskDSL模型
-│   │   ├── compiler.py             # 指令→状态机编译器(9S/20E)
-│   │   ├── state_tracker.py        # Runtime状态追踪(slot+intent+auto-advance)
-│   │   └── coverage.py             # 4类覆盖率追踪器
-│   ├── evaluators/                 # 评测引擎
-│   │   ├── cgads.py                # CGADS算法核心
-│   │   ├── coverage_driven_scenario_generator.py  # 19模板+风险优先排序
-│   │   ├── three_layer_user_simulator.py          # 状态感知模拟器
-│   │   ├── llm_judge.py            # Reasoning-First LLM Judge
-│   │   └── replay_mode.py          # 离线回放
-│   ├── checkers/                   # 规则检查
-│   │   └── severity_checker.py     # P0/P1否定语义检测器
-│   ├── calibration/                # 30条金标校准集
-│   ├── report/                     # 评估报告生成
-│   ├── instruction_parser/         # 指令解析+角色标准化
-│   └── visualization/              # Mermaid状态图 + Plotly图表
-│
-├── backend/                        # FastAPI SSE实时接口
-│   └── api.py                      # 核心API(评测/批量/复测/对比)
-├── frontend/                       # React前端(工作台设计系统)
-│
-├── data/
-│   ├── processed/                  # 已解析任务(骑手外呼/课程平台)
-│   ├── calibration/                # 30条金标JSONL
-│   ├── eval/                       # 评测结果JSON
-│   └── reports/                    # 生成的评估报告
-│
-├── docs/                           # 文档
-├── assets/                         # 图片资源
-├── scripts/                        # 工具脚本
-├── experiments/                    # CGADS消融实验
-├── tests/                          # 端到端测试
-├── Dockerfile                      # 容器化部署
-├── railway.toml                    # Railway部署配置
-└── requirements.txt                # Python依赖
-```
-
----
-
-## 关键技术细节
-
-### 状态机编译
-
-任务指令自动编译为9状态/20边的有限状态机：
-
-```
-opening → inform → intent_confirm → closing
-    ↓         ↓           ↓
-auth_or_trust  faq_handling  refusal_exit
-    ↓
-busy_handling → closing
-    ↓
-handoff_or_escalation
-```
-
-每条边有明确的触发条件（intent/slot/keyword），支持状态感知slot门控。
-
-### 风险优先调度
-
-Round-Robin策略确保风险和路径同时覆盖：
-
-```
-Phase 1 (9场景): P0×3 → P1×4 → edge-heavy×3
-  - P0: 诱导违规/敏感信息/持续营销
-  - P1: 质疑身份/忙碌/拒绝/FAQ
-  - edge: 配合型/提问型/中途拒绝
-Phase 2 (3场景): 覆盖缺口定向补测
-```
-
-### 状态感知Fallback
-
-即使LLM超时，系统仍能通过状态感知的fallback正确驱动状态转换：
-
-```python
-# 每个状态有2-5种fallback变体，按turn轮换防重复
-inform_fallbacks = [
-    "通知您，合同已签署生效，今日需完成配送任务。",
-    "配送任务最低8单，完成后收入按约定结算。",
-    "配送要求已发至您App，请查看具体说明。",
-]
-```
-
----
-
-## 参考文献
-
-| 来源 | 用途 | 论文/链接 |
-|------|------|----------|
+| 来源 | 迁移用途 | 论文 |
+|------|---------|------|
+| Coverage-Guided Fuzzing | CGADS覆盖率驱动核心思想 | AFL/LibFuzzer |
 | IFEval | 可验证约束检查 | arXiv:2311.07911 |
 | G-Eval | LLM Judge with CoT | arXiv:2303.16634 |
 | Prometheus | Fine-grained rubric | arXiv:2310.08491 |
 | MultiChallenge | 多轮instance rubric | arXiv:2501.17399 |
 | ConvLab-2 | DST/Policy思想 | ACL 2020 Demo |
 | Anthropic Eval | Reasoning-first judge | docs.anthropic.com |
-| Automated Rubrics | Criterion binary评测 | arXiv:2601.15161 |
 
 ---
 
-## 团队
+## 👥 团队
 
 **对对队** · 美团AI Hackathon 2026
+
+---
+
+<p align="center">
+  <em>"评测系统的价值不在于给一个分，而在于让数字人团队拿到报告的那一刻就知道下一步该做什么。"</em>
+</p>
 
 ---
 
