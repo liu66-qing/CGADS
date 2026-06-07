@@ -2594,3 +2594,79 @@ main {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ========== Batch Jobs Panel ========== */
+.batch-jobs-panel {
+  grid-column: 1 / -1;
+}
+
+.batch-jobs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.refresh-jobs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  transition: background .15s;
+}
+.refresh-jobs-btn:hover { background: #e2e8f0; }
+
+.refresh-jobs-btn .spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.batch-jobs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.batch-jobs-table th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #64748b;
+  font-weight: 500;
+}
+.batch-jobs-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.batch-jobs-table .job-id {
+  font-family: monospace;
+  color: #6366f1;
+}
+.batch-jobs-table .job-preview {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.job-pending { background: #fef3c7; color: #92400e; }
+.job-running { background: #dbeafe; color: #1e40af; }
+.job-done { background: #dcfce7; color: #166534; }
+.job-error { background: #fee2e2; color: #991b1b; }
+
+.batch-empty {
+  color: #94a3b8;
+  font-size: 13px;
+  padding: 12px 0;
+}

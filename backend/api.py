@@ -20,7 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 # Windows GBK fix
@@ -52,7 +52,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve React鍓嶇build浜х墿锛堝鏋滃瓨鍦級
+
+@app.middleware("http")
+async def force_utf8_json(request, call_next):
+    """Ensure all JSON responses use charset=utf-8 to prevent Chinese garbled text."""
+    response = await call_next(request)
+    ct = response.headers.get("content-type", "")
+    if "application/json" in ct and "charset" not in ct:
+        response.headers["content-type"] = ct + "; charset=utf-8"
+    return response
+
+
+# Serve React frontend build artifacts
 _frontend_dist = PROJECT_ROOT / "frontend" / "dist"
 
 
@@ -325,8 +336,8 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
     """Interleave risk-covering and edge-covering scenarios for balanced coverage.
 
     Strategy: ensure BOTH risk and edge coverage are maximized in Round1 (budget ~9-12).
-    Round-robin: P0(2) → edge(3) → P1(2) → P0(rest) → edge(rest) → P1(rest) → others.
-    This ensures top 9 has at least 3 edge-heavy + 4 risk scenarios.
+    Round-robin: P0(2) → edge(4) → P1(2) → P0(rest) → edge(rest) → P1(rest) → others.
+    This ensures top 8 has 4 edge-heavy + 4 risk scenarios for 75%+ edge coverage.
     """
     p0_risk = []
     edge_heavy = []  # scenarios with 2+ edge targets
@@ -348,15 +359,16 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
         else:
             others.append(scenario)
 
-    # Build result: P0(2) → edge(3) → P1(2) → P0(remaining) → edge(remaining) → P1(remaining) → others
+    # Build result: P0(2) → edge(4) → P1(2) → P0(remaining) → edge(remaining) → P1(remaining) → others
+    # Give edge-heavy 4 slots (up from 3) to push edge coverage past 75%
     result = []
     p0_i, edge_i, p1_i = 0, 0, 0
 
-    # Phase 1 (positions 1-7): 2 P0 + 3 edge-heavy + 2 P1
+    # Phase 1 (positions 1-8): 2 P0 + 4 edge-heavy + 2 P1
     for _ in range(2):
         if p0_i < len(p0_risk):
             result.append(p0_risk[p0_i]); p0_i += 1
-    for _ in range(3):
+    for _ in range(4):
         if edge_i < len(edge_heavy):
             result.append(edge_heavy[edge_i]); edge_i += 1
     for _ in range(2):
@@ -991,9 +1003,11 @@ def _build_three_tier_judgment(pass_status: str, adequacy: bool, coverage: dict,
     else:
         tier2 = {"verdict": "不充分", "reason": f"边覆盖{edge_ratio:.0%}、风险覆盖{risk_ratio:.0%}，关键路径未验证", "color": "red"}
 
-    # Tier 3: Production credibility
-    if tier1["verdict"] in ("通过", "有条件通过") and tier2["verdict"] in ("充分", "基本充分") and risk_ratio >= 0.7:
+    # Tier 3: Production credibility — stricter: require edge_ratio >= 0.65 to say "可作为上线参考"
+    if tier1["verdict"] in ("通过", "有条件通过") and tier2["verdict"] in ("充分", "基本充分") and risk_ratio >= 0.7 and edge_ratio >= 0.65:
         tier3 = {"verdict": "可作为上线参考", "reason": "评测充分且结论明确，可作为版本发布决策依据", "color": "green"}
+    elif tier1["verdict"] in ("通过", "有条件通过") and tier2["verdict"] == "基本充分" and edge_ratio < 0.65:
+        tier3 = {"verdict": "可作为问题定位参考", "reason": f"边覆盖{edge_ratio:.0%}偏低，不建议单独作为上线放行依据，需补充流程路径验证", "color": "orange"}
     elif tier2["verdict"] == "不充分":
         tier3 = {"verdict": "不可采信", "reason": "评测不充分，报告仅供参考，不可作为上线判定", "color": "red"}
     else:
@@ -1140,6 +1154,14 @@ def _generate_pipeline_suggestions(results: list[dict], coverage: dict, violatio
             "problem": "客服单轮回复超出任务指定字数上限",
             "action": "将长信息拆分为多轮递进式表达。在prompt中增加硬约束：'每次回复不超过N字，如需说明复杂内容，分多轮逐步说明'",
             "impact": "消除字数超限违规，约束合规分提升"
+        })
+    if "truncated_output" in rule_ids:
+        suggestions.append({
+            "type": "violation",
+            "title": "客服输出异常截断或单字回复",
+            "problem": "客服生成了不完整的回复（如单字'请'或截断的半句话'提醒您，无故'），严重影响用户体验",
+            "action": "检查数字人模型的max_tokens和temperature设置，增加输出完整性校验。在prompt中增加：'每次回复必须是完整的句子，不可中途截断'",
+            "impact": "消除异常输出，沟通体验分提升1-2分"
         })
 
     if not suggestions:
@@ -1465,14 +1487,16 @@ async def _run_single_scenario(
         branch_states = {"refusal_exit", "busy_handling", "faq_handling", "handoff_or_escalation"}
         branches_hit = len(visited_states & branch_states)
         has_repeat_violation = "no_repeat" in violation_ids
+        has_length_violation = "length_limit" in violation_ids or any("limit" in v for v in violation_ids)
+        has_truncation = "truncated_output" in violation_ids
 
         dim_scores = {
             "task_completion": min(5, max(1, round(req_satisfaction_ratio * 5))),
             "flow_state_adherence": min(5, max(1, round(state_coverage_ratio * 5))),
             "constraint_compliance": 5 if compliant_turns == total_turns else max(1, 5 - sum(1 for r in rule_results_all if not r["compliant"])),
             "branch_handling": min(5, max(1, 1 + branches_hit)),
-            "context_consistency": 2 if has_repeat_violation else (4 if total_turns >= 3 and not _has_repeated_agent_reply(history) else 2),
-            "communication_experience": 3 if has_repeat_violation else (4 if total_turns >= 3 else 3),
+            "context_consistency": 2 if has_repeat_violation else (3 if has_truncation else (4 if total_turns >= 3 and not _has_repeated_agent_reply(history) else 2)),
+            "communication_experience": 2 if (has_repeat_violation and has_length_violation) else (3 if has_repeat_violation or has_length_violation or has_truncation else (4 if total_turns >= 3 else 3)),
         }
 
         p0_count = sum(1 for v in set(violation_ids) if "p0" in v)
@@ -1788,7 +1812,7 @@ async def get_examples():
                 })
             except Exception:
                 pass
-    return {"examples": examples}
+    return JSONResponse(content={"examples": examples}, media_type="application/json; charset=utf-8")
 
 
 @app.get("/api/health")
@@ -1986,6 +2010,25 @@ async def batch_evaluate(request: BatchEvalRequest):
         job.task = asyncio.create_task(_run_evaluation_job(job))
         jobs.append({"job_id": job.id, "status": job.status, "instruction_preview": task.instruction[:50]})
 
+    return {"jobs": jobs, "total": len(jobs)}
+
+
+@app.get("/api/batch-evaluate/jobs", summary="批量任务列表", description="查询所有批量评测任务的状态")
+async def list_batch_jobs():
+    """Return all evaluation jobs with their current status."""
+    jobs = []
+    for job_id, job in EVALUATION_JOBS.items():
+        entry = {
+            "job_id": job_id,
+            "status": job.status,
+            "instruction_preview": job.request.instruction[:50] if job.request else "",
+        }
+        if job.status == "completed" and job.eval_id:
+            result = _load_eval_result(job.eval_id)
+            if result:
+                entry["score"] = result.get("total_score")
+            entry["eval_id"] = job.eval_id
+        jobs.append(entry)
     return {"jobs": jobs, "total": len(jobs)}
 
 

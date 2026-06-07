@@ -1,5 +1,5 @@
-import { ChevronDown, Database, FileUp, Play, Sparkles, Square } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, Database, FileUp, Play, RefreshCw, Sparkles, Square } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { compileDslPreview, getExamples } from '../api'
 import { defaultOfficialExample, officialExamples, type OfficialExample } from '../data/officialExamples'
@@ -13,6 +13,8 @@ export function InputPanel() {
   const [selectedId, setSelectedId] = useState(defaultOfficialExample.id)
   const [previewing, setPreviewing] = useState(false)
   const [examples, setExamples] = useState<OfficialExample[]>(officialExamples)
+  const [batchJobs, setBatchJobs] = useState<Array<{job_id: string; status: string; instruction_preview: string; score?: number}>>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
 
   const instruction = useEvaluationStore((s) => s.instruction)
   const setInstruction = useEvaluationStore((s) => s.setInstruction)
@@ -47,6 +49,19 @@ export function InputPanel() {
       alive = false
     }
   }, [setBackendStatus])
+
+  const fetchBatchJobs = useCallback(async () => {
+    setJobsLoading(true)
+    try {
+      const baseUrl = import.meta.env.VITE_API_BASE || ''
+      const resp = await fetch(`${baseUrl}/api/batch-evaluate/jobs`)
+      if (resp.ok) {
+        const data = await resp.json()
+        setBatchJobs(data.jobs ?? [])
+      }
+    } catch { /* backend may not support this yet */ }
+    setJobsLoading(false)
+  }, [])
 
   const selectedExample = useMemo(
     () => examples.find((item) => item.id === selectedId) ?? examples[0] ?? defaultOfficialExample,
@@ -192,6 +207,35 @@ POST /api/compare
    "after":  {"score": 67.2, "p1": 1, "risk_cov": 0.88},
    "diff": "+18.7分, -1个P1, +13%风险覆盖"}`}</pre>
               </div>
+            </div>
+          </details>
+
+          <details className="api-docs-panel batch-jobs-panel">
+            <summary onClick={() => { if (!batchJobs.length) fetchBatchJobs() }}>批量任务列表 & Job 状态</summary>
+            <div className="api-docs-content">
+              <div className="batch-jobs-header">
+                <small>{batchJobs.length} 个任务</small>
+                <button type="button" className="refresh-jobs-btn" onClick={fetchBatchJobs} disabled={jobsLoading}>
+                  <RefreshCw size={14} className={jobsLoading ? 'spin' : ''} /> 刷新
+                </button>
+              </div>
+              {batchJobs.length > 0 ? (
+                <table className="batch-jobs-table">
+                  <thead><tr><th>Job ID</th><th>状态</th><th>指令预览</th><th>得分</th></tr></thead>
+                  <tbody>
+                    {batchJobs.map((job) => (
+                      <tr key={job.job_id}>
+                        <td className="job-id">{job.job_id.slice(0, 8)}</td>
+                        <td><span className={`job-status job-${job.status === 'completed' ? 'done' : job.status === 'queued' ? 'pending' : job.status}`}>{job.status}</span></td>
+                        <td className="job-preview">{job.instruction_preview}</td>
+                        <td>{job.score != null ? `${job.score}分` : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="batch-empty">暂无批量任务。通过 POST /api/batch-evaluate 提交后，任务将显示在此列表中。</p>
+              )}
             </div>
           </details>
         </form>
