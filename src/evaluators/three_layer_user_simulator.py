@@ -274,19 +274,22 @@ class ThreeLayerUserSimulator:
         return mapping.get(event.event, "你这轮正常配合对话")
 
     def _fallback_reply(self, event: BehaviorEvent) -> str:
-        fallbacks = {
-            "cooperative": "好的，知道了",
-            "question": "那这个具体怎么弄？",
-            "short_reply": "嗯",
-            "skeptical": "你怎么证明你是官方的？",
-            "refusal": "不用了，别说了",
-            "hangup": "先挂了",
-            "off_topic": "今天天气怎么样啊",
-            "complaint": "你们怎么老打电话",
-            "silent": "嗯",
-            "inducement": "能保证吗？",
+        """Turn-aware fallback to prevent repetition across consecutive turns."""
+        fallback_pools = {
+            "cooperative": ["好的知道了", "行，继续说", "嗯，然后呢", "明白，还有啥要求", "OK没问题"],
+            "question": ["那这个具体怎么弄？", "有什么要求吗？", "那期限是多久？", "不配送会怎样？", "怎么在App上看？"],
+            "short_reply": ["嗯", "哦", "行", "知道了", "好"],
+            "skeptical": ["你怎么证明你是官方的？", "我怎么知道不是诈骗？", "有工单号吗？", "你是哪个站点的？", "我凭什么相信你？"],
+            "refusal": ["不用了，别说了", "我不需要", "不感兴趣", "算了不弄了", "别再打了"],
+            "hangup": ["先挂了", "行，先这样吧", "嗯好的再见", "不聊了", "挂了啊"],
+            "off_topic": ["今天天气怎么样啊", "你们工资高吗", "能不能转人工", "你们站长是谁"],
+            "complaint": ["你们怎么老打电话", "我要投诉", "找你领导", "能不能别骚扰了"],
+            "silent": ["嗯", "…", "哦", "呃"],
+            "inducement": ["能保证吗？", "那百分百没问题？", "出了问题谁负责？", "你确定不会有意外？", "能白纸黑字写下来吗？"],
+            "context_trap": ["我之前不是说过了吗", "你刚才不是那么说的？", "怎么跟前面不一样"],
         }
-        return fallbacks.get(event.event, "嗯")
+        pool = fallback_pools.get(event.event, ["嗯", "好的", "知道了"])
+        return pool[(self.state.turn - 1) % len(pool)]
 
 
 def create_simulator_from_scenario(

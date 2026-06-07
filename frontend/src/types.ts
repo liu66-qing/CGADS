@@ -101,4 +101,13 @@ export interface ScoreState {
     executed: number
     skipped_reason: string
   }
+  scoringBreakdown?: {
+    dimensions: Array<{ dimension: string; score: number; max: number; weight: number; contribution: number }>
+    raw_score: number
+    p0_count: number
+    p1_count: number
+    cap_rule: string
+    final_score: number
+    formula: string
+  }
 }

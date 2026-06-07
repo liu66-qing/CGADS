@@ -21,6 +21,11 @@ export function InputPanel() {
   const setBackendStatus = useEvaluationStore((s) => s.setBackendStatus)
   const { start, stop } = useEvaluationSse()
 
+  // Auto-collapse when evaluation starts, auto-expand when done with results
+  useEffect(() => {
+    if (running) setOpen(false)
+  }, [running])
+
   useEffect(() => {
     let alive = true
     getExamples()
@@ -142,6 +147,10 @@ export function InputPanel() {
             <button type="button" className="preview-button" onClick={previewDsl} disabled={previewing || running}>
               {previewing ? '编译中...' : '预览状态机'}
             </button>
+            <div className="batch-hint">
+              <small>支持批量评测：POST /api/batch-evaluate</small>
+              <small>多任务并发 · JSON/API接入 · 最多20条/次</small>
+            </div>
           </aside>
         </form>
       )}

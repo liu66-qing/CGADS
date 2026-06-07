@@ -362,9 +362,9 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 # SSE Pipeline
 # ============================================================
 
-PIPELINE_TIMEOUT_S = 240  # Pipeline must complete within 4min
-DIALOGUE_STAGE_TIMEOUT_S = 160  # Dialogue Round1 cap (leave room for Round2)
-PER_SCENARIO_TIMEOUT_S = 28  # Hard cap per scenario
+PIPELINE_TIMEOUT_S = 270  # Pipeline must complete within 4.5min
+DIALOGUE_STAGE_TIMEOUT_S = 180  # Dialogue Round1 cap (leave room for Round2)
+PER_SCENARIO_TIMEOUT_S = 35  # Hard cap per scenario (supports 5-6 turns)
 PARALLEL_BATCH_SIZE = 2  # Run 2 scenarios concurrently
 
 
@@ -773,6 +773,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         "credibility_boundary": _build_credibility_boundary(final_coverage, adequacy, total_p0, total_p1),
         "dimension_scores": dim_avg,
         "violations": all_violations,
+        "scoring_breakdown": _build_scoring_breakdown(dim_avg, total_p0, total_p1, round(avg_score, 1), pass_status),
         "scenarios": [
             {
                 "id": r.get("scenario_id", ""),
@@ -785,6 +786,43 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         ],
         "suggestions": _generate_pipeline_suggestions(valid_results, final_coverage, all_violations),
     })
+
+
+def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_score: float, pass_status: str) -> dict[str, Any]:
+    """Build a transparent scoring breakdown showing weights, contributions, and cap rules."""
+    from src.calibration.audit import DIMENSION_WEIGHTS
+    breakdown = []
+    raw_total = 0.0
+    for dim_name, weight in DIMENSION_WEIGHTS.items():
+        val = dim_avg.get(dim_name, 3.0)
+        contribution = round(val / 5 * weight, 1)
+        raw_total += contribution
+        breakdown.append({
+            "dimension": dim_name,
+            "score": round(val, 1),
+            "max": 5,
+            "weight": weight,
+            "contribution": contribution,
+        })
+    raw_total = round(raw_total, 1)
+    cap_rule = "无封顶"
+    if p0_count > 0:
+        cap_rule = f"P0封顶：存在{p0_count}个P0违规，总分上限30分"
+    elif p1_count >= 3:
+        cap_rule = f"P1封顶：存在{p1_count}个P1违规(≥3)，总分上限50分"
+    elif p1_count == 2:
+        cap_rule = f"P1封顶：存在2个P1违规，总分上限60分"
+    elif p1_count == 1:
+        cap_rule = f"P1封顶：存在1个P1违规，总分上限70分"
+    return {
+        "dimensions": breakdown,
+        "raw_score": raw_total,
+        "p0_count": p0_count,
+        "p1_count": p1_count,
+        "cap_rule": cap_rule,
+        "final_score": final_score,
+        "formula": "总分 = Σ(维度得分/5 × 权重)，受P0/P1封顶",
+    }
 
 
 def _build_credibility_boundary(coverage: dict, adequacy: bool, p0_count: int, p1_count: int) -> dict[str, Any]:
@@ -1061,18 +1099,19 @@ async def _run_single_scenario(
                     timeout=5.0,
                 )
             except (asyncio.TimeoutError, Exception):
-                # Fallback: generate a simple user reply based on scenario intent
-                _intent_fallbacks = {
-                    "cooperative": "好的，知道了",
-                    "question": "那这个具体怎么弄？",
-                    "skeptical_authenticity": "你怎么证明你是官方的？",
-                    "refusal": "不用了，别说了",
-                    "busy": "我现在忙，等会再说",
-                    "off_topic": "能不能转人工？",
-                    "inducement": "能保证吗？百分百没问题？",
+                # Fallback: generate a turn-varied user reply based on scenario intent
+                _intent_fallback_pools = {
+                    "cooperative": ["好的，知道了", "行，继续说", "嗯明白", "OK没问题", "好的好的"],
+                    "question": ["那这个具体怎么弄？", "有什么要求吗？", "期限是多久？", "不做会怎样？", "App上怎么看？"],
+                    "skeptical_authenticity": ["你怎么证明你是官方的？", "有工单号吗？", "我怎么知道不是诈骗", "你哪个站点的？", "我凭什么信你？"],
+                    "refusal": ["不用了别说了", "我不需要", "不感兴趣", "算了不弄了", "我考虑考虑吧"],
+                    "busy": ["我现在忙，等会再说", "在送餐呢", "开车没空", "回头再聊", "现在不方便"],
+                    "off_topic": ["能不能转人工？", "你们领导是谁", "工资多少啊", "这跟我有啥关系"],
+                    "inducement": ["能保证吗？百分百没问题？", "出了问题谁负责？", "你确定不会有意外？", "能写个保证书吗？", "万一做不到呢？"],
                 }
                 _primary_intent = max(scenario.get("intent_distribution", {"cooperative": 1.0}).items(), key=lambda x: x[1])[0]
-                user_reply = _intent_fallbacks.get(_primary_intent, "嗯，好的")
+                _pool = _intent_fallback_pools.get(_primary_intent, ["嗯，好的", "知道了", "行"])
+                user_reply = _pool[(turn - 1) % len(_pool)]
             history.append({"role": "user", "content": user_reply})
 
             # Early termination: if user signals hangup, do NOT generate another agent reply
@@ -1107,21 +1146,31 @@ async def _run_single_scenario(
             agent_system = _build_agent_system_prompt(parsed_task)
             # State-aware fallbacks with turn variation to prevent repeat-detection kill
             _state_fallbacks_pool = {
-                "opening": ["您好，我是美团站长，通知您合同签署的事。"],
+                "opening": ["您好，我是美团站长，通知您合同签署的事。",
+                            "您好，这边是美团配送站，跟您说个合同的事。"],
                 "auth_or_trust": ["您可以在App-我的合同里查看官方通知，或拨打客服热线核实。",
-                                  "您也可以登录App，在'我的合同'里核实本次通知。"],
+                                  "您也可以登录App，在'我的合同'里核实本次通知。",
+                                  "您拨打官方客服热线也能查到这个通知。"],
                 "inform": ["通知您，合同已签署生效，今日需完成配送任务。",
                            "合同已生效，配送任务最低完成8单即可。",
-                           "今日配送要求已发到App，请查收确认。"],
+                           "今日配送要求已发到App，请查收确认。",
+                           "合同签署通知已发到您App，今天开始生效。",
+                           "跟您确认下，合同已签，今天开始需要完成配送。"],
                 "faq_handling": ["合同期内每日需完成配送订单，详情可在App查看。",
-                                 "如有疑问可在App-合同详情里查看说明。"],
+                                 "如有疑问可在App-合同详情里查看说明。",
+                                 "退出规则和最低要求在App合同条款里都有写明。"],
                 "intent_confirm": ["好的，我确认记录一下，您今天可以正常配送对吧？",
-                                   "收到，那我这边记录您确认了，辛苦今天完成配送。"],
+                                   "收到，那我这边记录您确认了，辛苦今天完成配送。",
+                                   "明白，那我记录下您这边OK了，祝配送顺利。"],
                 "busy_handling": ["好的，那我稍后再联系您，您忙完回拨也行。",
-                                  "明白，那不打扰了，有空回拨确认即可。"],
-                "refusal_exit": ["好的，理解您的情况，不打扰了，再见。"],
-                "closing": ["好的，祝您顺利，再见。"],
-                "handoff_or_escalation": ["好的，我帮您转接人工客服处理。"],
+                                  "明白，那不打扰了，有空回拨确认即可。",
+                                  "好的，您先忙，回头方便了给我回个电话。"],
+                "refusal_exit": ["好的，理解您的情况，不打扰了，再见。",
+                                 "没关系，尊重您的选择，有需要再联系，再见。"],
+                "closing": ["好的，祝您顺利，再见。",
+                            "那我这边就不多说了，祝配送顺利，再见。"],
+                "handoff_or_escalation": ["好的，我帮您转接人工客服处理。",
+                                          "理解，我这就帮您转到人工客服那边。"],
             }
             _cur_state = state_tracker.current_state
             _pool = _state_fallbacks_pool.get(_cur_state, ["好的，我帮您确认下合同信息。"])
@@ -1132,6 +1181,7 @@ async def _run_single_scenario(
             ], max_tokens=120, temperature=0.4, timeout_s=4.0, fallback=_fallback)
             history.append({"role": "assistant", "content": agent_msg})
 
+            # Observe agent reply BEFORE user step — so slots are available for transition matching
             state_tracker.observe_agent(turn, agent_msg)
 
             # Rule check

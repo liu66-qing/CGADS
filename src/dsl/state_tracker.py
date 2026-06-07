@@ -147,10 +147,10 @@ class StateTracker:
             updates.setdefault("verification_path_provided", True)
             if self.current_state == "auth_or_trust":
                 updates.setdefault("trust_verified", True)
-        # benefit_explained: only in inform state, after 2+ agent turns in inform
+        # benefit_explained: in inform state, after agent mentions core task info at least once
         if self.current_state == "inform":
             turns_in_inform = sum(1 for h in self.history if h.new_state == "inform")
-            if turns_in_inform >= 2:
+            if turns_in_inform >= 1:
                 if any(kw in text for kw in ["合同", "权益", "活动", "抽奖", "订单", "配送", "完成", "签署", "生效", "通知", "任务", "要求"]):
                     updates.setdefault("benefit_explained", True)
         if any(kw in text for kw in ["再见", "祝您", "辛苦", "打扰了", "顺利"]):

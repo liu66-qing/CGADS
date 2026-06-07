@@ -118,6 +118,32 @@ export function ScoreCard() {
           </div>
         )}
       </div>
+      {score.scoringBreakdown && (
+        <details className="scoring-breakdown plugin-card">
+          <summary><h3 style={{ display: 'inline', fontSize: '14px' }}>评分计算明细</h3></summary>
+          <p className="formula-hint">{score.scoringBreakdown.formula}</p>
+          <table className="breakdown-table">
+            <thead>
+              <tr><th>维度</th><th>得分</th><th>权重</th><th>贡献</th></tr>
+            </thead>
+            <tbody>
+              {score.scoringBreakdown.dimensions.map((d) => (
+                <tr key={d.dimension}>
+                  <td>{dimensionMap[d.dimension] ?? d.dimension}</td>
+                  <td>{d.score}/{d.max}</td>
+                  <td>{d.weight}%</td>
+                  <td>{d.contribution}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr><td colSpan={3}>原始总分</td><td><strong>{score.scoringBreakdown.raw_score}</strong></td></tr>
+              <tr><td colSpan={3}>封顶规则</td><td>{score.scoringBreakdown.cap_rule}</td></tr>
+              <tr><td colSpan={3}>最终得分</td><td><strong>{score.scoringBreakdown.final_score}</strong></td></tr>
+            </tfoot>
+          </table>
+        </details>
+      )}
       {score.credibilityBoundary && (
         <div className="credibility-boundary plugin-card">
           <h3>采信边界</h3>

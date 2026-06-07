@@ -102,7 +102,7 @@ export function PipelineTracker() {
               <small>
                 {step.status === 'running' && <Loader2 className="spin" size={14} />}
                 {step.status === 'done' && <CheckCircle2 size={14} />}
-                {step.status === 'done' ? `${step.duration ?? 0}s` : step.status}
+                {step.status === 'done' ? (step.duration != null && step.duration < 0.1 ? '<0.1s' : `${step.duration ?? 0}s`) : step.status}
               </small>
             </article>
           )
