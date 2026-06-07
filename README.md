@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://cgads.vercel.app">🌐 在线体验</a> ·
+  <a href="https://diligent-eagerness-production-14ff.up.railway.app/">🌐 在线体验</a> ·
   <a href="./docs/项目文档.md">📄 项目文档</a> ·
   <a href="./docs/系统设计方案.md">📐 系统设计</a> ·
   <a href="./docs/作品简介.md">📋 作品简介</a>
@@ -153,7 +153,7 @@ if truncated_output: communication_experience强制≤3分
 
 ### 在线体验
 
-**🌐 [https://cgads.vercel.app](https://cgads.vercel.app)**
+**🌐 [https://diligent-eagerness-production-14ff.up.railway.app](https://diligent-eagerness-production-14ff.up.railway.app)**
 
 粘贴任务指令 → 点击"开始评测" → 观察Pipeline实时推进 → 查看三层采信判定 → 下载评估报告
 
@@ -179,15 +179,15 @@ python scripts/start.py
 
 ```bash
 # 批量提交
-curl -X POST https://cgads.vercel.app/api/batch-evaluate \
+curl -X POST https://diligent-eagerness-production-14ff.up.railway.app/api/batch-evaluate \
   -H "Content-Type: application/json" \
   -d '{"instructions": ["任务指令1", "任务指令2"], "budget": 12}'
 
 # 状态查询
-curl https://cgads.vercel.app/api/batch-evaluate/{batch_id}/status
+curl https://diligent-eagerness-production-14ff.up.railway.app/api/batch-evaluate/{batch_id}/status
 
 # 复测闭环
-curl -X POST https://cgads.vercel.app/api/retest \
+curl -X POST https://diligent-eagerness-production-14ff.up.railway.app/api/retest \
   -d '{"instruction": "...", "baseline_eval_id": "xxx"}'
 ```
 
