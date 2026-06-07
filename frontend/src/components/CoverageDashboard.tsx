@@ -9,7 +9,7 @@ const labels = [
   ['requirement', '要求覆盖'],
 ] as const
 
-const colorFor = (value: number) => (value >= 80 ? '#2196F3' : value >= 60 ? '#FF8A00' : '#F44336')
+const colorFor = (value: number) => (value >= 80 ? '#2563eb' : value >= 60 ? '#64748b' : '#94a3b8')
 
 export function CoverageDashboard() {
   const coverage = useEvaluationStore((s) => s.coverage)

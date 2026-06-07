@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 
 export function HeroBanner() {
   const [collapsed, setCollapsed] = useState(false)
@@ -11,7 +11,7 @@ export function HeroBanner() {
   }, [])
 
   return (
-    <section className={`hero-stage ${collapsed ? 'collapsed' : ''}`} aria-label="橙脉 CGADS 作品封面">
+    <section className={`hero-stage ${collapsed ? 'collapsed' : ''}`} aria-label="外呼评测系统 作品封面">
       <div className="hero-safe-frame" />
     </section>
   )

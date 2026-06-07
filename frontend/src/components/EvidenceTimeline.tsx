@@ -10,8 +10,8 @@ export function EvidenceTimeline() {
     <section className="panel timeline-panel plugin-panel">
       <header className="section-head">
         <div>
-          <h2><ThemeIcon name="timeline" size={26} /> 证据时间轴</h2>
-          <p>每条分数都要能回到一次场景、一次覆盖或一次违规</p>
+          <h2><ThemeIcon name="timeline" size={26} /> P0/P1 证据</h2>
+          <p>每条高风险扣分都要能回到一次场景、一次对话 turn 和一条规则</p>
         </div>
         <span className="next-cue">下一步看：完整报告</span>
       </header>

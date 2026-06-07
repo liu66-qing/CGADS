@@ -9,6 +9,8 @@ import { ReportPanel } from './components/ReportPanel'
 import { ScoreCard } from './components/ScoreCard'
 import { StateMachineGraph } from './components/StateMachineGraph'
 import { ThemeIcon } from './components/ThemeIcon'
+import { TrustBoundaryPanel } from './components/TrustBoundaryPanel'
+import { OptimizationAdvicePanel } from './components/OptimizationAdvicePanel'
 import { useEvaluationStore } from './store/evaluationStore'
 
 export function App() {
@@ -51,20 +53,23 @@ export function App() {
 
       <div className="workspace">
         <InputPanel />
-        <details className="pipeline-collapsible" open>
-          <summary>评测进度</summary>
-          <PipelineTracker />
-        </details>
-        <div className="main-grid results-primary">
-          <ScoreCard />
+        <div className="evaluation-workbench">
+          <aside className="route-rail" aria-label="评测进度">
+            <PipelineTracker />
+          </aside>
+          <section className="business-main" aria-label="评测主体内容">
+            <ScoreCard />
+            <EvidenceTimeline />
+            <TrustBoundaryPanel />
+            <OptimizationAdvicePanel />
+            <DialogueViewer />
+            <ReportPanel />
+            <details className="state-machine-collapsible">
+              <summary>状态机可视化（辅助分析）</summary>
+              <StateMachineGraph />
+            </details>
+          </section>
         </div>
-        <EvidenceTimeline />
-        <DialogueViewer />
-        <ReportPanel />
-        <details className="state-machine-collapsible">
-          <summary>状态机可视化（辅助分析）</summary>
-          <StateMachineGraph />
-        </details>
         <HistoryStrip />
       </div>
     </main>
