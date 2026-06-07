@@ -147,6 +147,9 @@ export function ScoreCard() {
       {score.scoringBreakdown && (
         <details className="scoring-breakdown plugin-card">
           <summary><h3 style={{ display: 'inline', fontSize: '14px' }}>评分计算明细</h3></summary>
+          {score.scoringBreakdown.business_summary && (
+            <p className="business-summary">{score.scoringBreakdown.business_summary}</p>
+          )}
           <p className="formula-hint">{score.scoringBreakdown.formula}</p>
           <table className="breakdown-table">
             <thead>

@@ -13,7 +13,7 @@ export function InputPanel() {
   const [selectedId, setSelectedId] = useState(defaultOfficialExample.id)
   const [previewing, setPreviewing] = useState(false)
   const [examples, setExamples] = useState<OfficialExample[]>(officialExamples)
-  const [batchJobs, setBatchJobs] = useState<Array<{job_id: string; status: string; instruction_preview: string; score?: number}>>([])
+  const [batchJobs, setBatchJobs] = useState<Array<{job_id: string; status: string; instruction_preview: string; score?: number; eval_id?: string}>>([])
   const [jobsLoading, setJobsLoading] = useState(false)
 
   const instruction = useEvaluationStore((s) => s.instruction)
@@ -221,7 +221,7 @@ POST /api/compare
               </div>
               {batchJobs.length > 0 ? (
                 <table className="batch-jobs-table">
-                  <thead><tr><th>Job ID</th><th>状态</th><th>指令预览</th><th>得分</th></tr></thead>
+                  <thead><tr><th>Job ID</th><th>状态</th><th>指令预览</th><th>得分</th><th>报告</th></tr></thead>
                   <tbody>
                     {batchJobs.map((job) => (
                       <tr key={job.job_id}>
@@ -229,6 +229,7 @@ POST /api/compare
                         <td><span className={`job-status job-${job.status === 'completed' ? 'done' : job.status === 'queued' ? 'pending' : job.status}`}>{job.status}</span></td>
                         <td className="job-preview">{job.instruction_preview}</td>
                         <td>{job.score != null ? `${job.score}分` : '-'}</td>
+                        <td>{job.eval_id ? <a href={`${import.meta.env.VITE_API_BASE || ''}/api/report/${job.eval_id}`} target="_blank" rel="noreferrer">查看报告</a> : '-'}</td>
                       </tr>
                     ))}
                   </tbody>

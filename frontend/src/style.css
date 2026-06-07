@@ -2670,3 +2670,14 @@ main {
   font-size: 13px;
   padding: 12px 0;
 }
+
+.business-summary {
+  font-size: 14px;
+  color: #1e293b;
+  font-weight: 500;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-left: 3px solid #6366f1;
+  border-radius: 4px;
+}

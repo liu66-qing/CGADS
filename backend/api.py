@@ -336,11 +336,12 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
     """Interleave risk-covering and edge-covering scenarios for balanced coverage.
 
     Strategy: ensure BOTH risk and edge coverage are maximized in Round1 (budget ~9-12).
-    Round-robin: P0(2) → edge(4) → P1(2) → P0(rest) → edge(rest) → P1(rest) → others.
-    This ensures top 8 has 4 edge-heavy + 4 risk scenarios for 75%+ edge coverage.
+    Round-robin: P0(2) → edge(5) → P1(2) → remaining interleaved.
+    Edge-heavy threshold lowered to 1+ edge targets to include more transition scenarios.
+    This ensures top 9 has 5 edge-heavy + 4 risk scenarios for 75%+ edge coverage.
     """
     p0_risk = []
-    edge_heavy = []  # scenarios with 2+ edge targets
+    edge_heavy = []  # scenarios with 1+ edge targets
     p1_risk = []
     others = []
 
@@ -352,23 +353,23 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 
         if has_p0:
             p0_risk.append(scenario)
-        elif edge_count >= 2:
+        elif edge_count >= 1:
             edge_heavy.append(scenario)
         elif has_p1:
             p1_risk.append(scenario)
         else:
             others.append(scenario)
 
-    # Build result: P0(2) → edge(4) → P1(2) → P0(remaining) → edge(remaining) → P1(remaining) → others
-    # Give edge-heavy 4 slots (up from 3) to push edge coverage past 75%
+    # Build result: P0(2) → edge(5) → P1(2) → remaining interleaved
+    # Give edge-heavy 5 slots to push edge coverage past 75%
     result = []
     p0_i, edge_i, p1_i = 0, 0, 0
 
-    # Phase 1 (positions 1-8): 2 P0 + 4 edge-heavy + 2 P1
+    # Phase 1 (positions 1-9): 2 P0 + 5 edge-heavy + 2 P1
     for _ in range(2):
         if p0_i < len(p0_risk):
             result.append(p0_risk[p0_i]); p0_i += 1
-    for _ in range(4):
+    for _ in range(5):
         if edge_i < len(edge_heavy):
             result.append(edge_heavy[edge_i]); edge_i += 1
     for _ in range(2):
@@ -970,9 +971,26 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
         "p1_count": p1_count,
         "cap_rule": cap_rule,
         "final_score": final_score,
-        "formula": "总分 = Σ(维度得分/5 × 权重)，受P0/P1封顶",
+        "formula": "总分 = Σ(维度得分/5 × 权重)，P0存在→上限30分，P1≥3→上限50分，P1=2→上限60分，P1=1→上限70分",
+        "business_summary": _scoring_business_summary(final_score, pass_status, p0_count, p1_count, cap_rule),
         "evidence": evidence,
     }
+
+
+def _scoring_business_summary(score: float, pass_status: str, p0: int, p1: int, cap_rule: str) -> str:
+    """One-sentence business-readable explanation of the score."""
+    if pass_status == "FAIL_P0":
+        return f"数字人触发{p0}个致命合规违规（P0），总分被封顶至30分以下，必须立即修复后复测。"
+    elif pass_status == "CAPPED_P1":
+        return f"数字人存在{p1}个高风险违规（P1），{cap_rule}。修复P1后分数预计可回升至原始加权分。"
+    elif pass_status == "INADEQUATE":
+        return "评测覆盖不足（关键路径未验证），当前分数不具备参考意义，需补充场景后重测。"
+    elif score >= 80:
+        return "数字人在已测场景中表现良好，无合规违规，各维度得分均衡。"
+    elif score >= 60:
+        return "数字人基础功能可用，但部分维度偏弱（如分支处理或上下文一致性），建议优化话术后复测。"
+    else:
+        return "数字人整体表现较差，多个维度得分偏低，建议全面优化prompt和状态机后重新评测。"
 
 
 def _build_three_tier_judgment(pass_status: str, adequacy: bool, coverage: dict, p0: int, p1: int) -> dict[str, Any]:
@@ -1003,13 +1021,16 @@ def _build_three_tier_judgment(pass_status: str, adequacy: bool, coverage: dict,
     else:
         tier2 = {"verdict": "不充分", "reason": f"边覆盖{edge_ratio:.0%}、风险覆盖{risk_ratio:.0%}，关键路径未验证", "color": "red"}
 
-    # Tier 3: Production credibility — stricter: require edge_ratio >= 0.65 to say "可作为上线参考"
-    if tier1["verdict"] in ("通过", "有条件通过") and tier2["verdict"] in ("充分", "基本充分") and risk_ratio >= 0.7 and edge_ratio >= 0.65:
-        tier3 = {"verdict": "可作为上线参考", "reason": "评测充分且结论明确，可作为版本发布决策依据", "color": "green"}
-    elif tier1["verdict"] in ("通过", "有条件通过") and tier2["verdict"] == "基本充分" and edge_ratio < 0.65:
-        tier3 = {"verdict": "可作为问题定位参考", "reason": f"边覆盖{edge_ratio:.0%}偏低，不建议单独作为上线放行依据，需补充流程路径验证", "color": "orange"}
+    # Tier 3: Production credibility
+    # Key rule: P1 exists → NEVER green. Only "通过" (no P0/P1) + adequate can be green.
+    if tier1["verdict"] == "通过" and tier2["verdict"] in ("充分", "基本充分") and risk_ratio >= 0.7 and edge_ratio >= 0.65:
+        tier3 = {"verdict": "可作为上线放行依据", "reason": "无P0/P1违规，评测充分，可直接用于版本发布决策", "color": "green"}
+    elif tier1["verdict"] == "有条件通过" and tier2["verdict"] in ("充分", "基本充分"):
+        tier3 = {"verdict": "可作为问题定位参考，不可直接放行", "reason": f"存在{p1}个P1违规未修复，报告可用于定位问题和修复优先级排序，但不能作为上线放行依据", "color": "orange"}
+    elif tier1["verdict"] == "通过" and tier2["verdict"] == "基本充分" and edge_ratio < 0.65:
+        tier3 = {"verdict": "需补充路径验证", "reason": f"边覆盖{edge_ratio:.0%}偏低，建议补充流程分支测试后再做上线决策", "color": "orange"}
     elif tier2["verdict"] == "不充分":
-        tier3 = {"verdict": "不可采信", "reason": "评测不充分，报告仅供参考，不可作为上线判定", "color": "red"}
+        tier3 = {"verdict": "不可采信", "reason": "评测覆盖不足，报告仅供参考，不可作为任何上线判定", "color": "red"}
     else:
         tier3 = {"verdict": "需补充验证", "reason": "建议补充风险场景或边界路径后再做上线决策", "color": "orange"}
 

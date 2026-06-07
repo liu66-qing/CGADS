@@ -109,6 +109,7 @@ export interface ScoreState {
     cap_rule: string
     final_score: number
     formula: string
+    business_summary?: string
     evidence?: {
       score_formula?: string
       task_completion?: { satisfied_count: number; satisfied_ids: string[] }
