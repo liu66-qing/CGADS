@@ -353,26 +353,29 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 
         if has_p0:
             p0_risk.append(scenario)
-        elif edge_count >= 1:
-            edge_heavy.append(scenario)
         elif has_p1:
             p1_risk.append(scenario)
+            # Also count as edge if it has edge targets (dual benefit)
+            if edge_count >= 1:
+                edge_heavy.append(scenario)
+        elif edge_count >= 1:
+            edge_heavy.append(scenario)
         else:
             others.append(scenario)
 
-    # Build result: P0(2) → edge(5) → P1(2) → remaining interleaved
-    # Give edge-heavy 5 slots to push edge coverage past 75%
+    # Build result: P0(2) → edge(5) → P1(3) → remaining interleaved
+    # Give edge-heavy 5 slots for 80%+ edge, P1 3 slots for 85%+ risk
     result = []
     p0_i, edge_i, p1_i = 0, 0, 0
 
-    # Phase 1 (positions 1-9): 2 P0 + 5 edge-heavy + 2 P1
+    # Phase 1 (positions 1-10): 2 P0 + 5 edge-heavy + 3 P1
     for _ in range(2):
         if p0_i < len(p0_risk):
             result.append(p0_risk[p0_i]); p0_i += 1
     for _ in range(5):
         if edge_i < len(edge_heavy):
             result.append(edge_heavy[edge_i]); edge_i += 1
-    for _ in range(2):
+    for _ in range(3):
         if p1_i < len(p1_risk):
             result.append(p1_risk[p1_i]); p1_i += 1
 
@@ -1718,6 +1721,17 @@ async def run_demo_stream(task_id: str = "task_001") -> AsyncGenerator[str, None
         dim_avg[dim] = round(sum(vals) / len(vals), 1) if vals else 3.0
 
     pass_status = "FAIL_P0" if total_p0 > 0 else ("CAPPED_P1" if total_p1 > 0 else "PASS")
+
+    # Enforce score cap (same logic as primary pipeline)
+    if pass_status == "FAIL_P0":
+        avg_score = min(avg_score, 30)
+    elif pass_status == "CAPPED_P1":
+        if total_p1 >= 3:
+            avg_score = min(avg_score, 50)
+        elif total_p1 == 2:
+            avg_score = min(avg_score, 60)
+        elif total_p1 == 1:
+            avg_score = min(avg_score, 70)
 
     yield sse_event("stage_complete", {
         "stage": "scoring", "duration_s": 0.1,
