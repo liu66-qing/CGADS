@@ -73,7 +73,7 @@ export function createEvaluationJob(instruction: string) {
   return requestJson<{ job_id: string; status: string }>('/api/evaluate/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ instruction, budget: 12, warmup_ratio: 0.35, max_turns: 8 }),
+    body: JSON.stringify({ instruction, budget: 12, warmup_ratio: 0.75, max_turns: 6 }),
   })
 }
 

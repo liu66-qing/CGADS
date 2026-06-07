@@ -1250,6 +1250,8 @@ async def _run_single_scenario(
         violation_ids = []
 
         agent_msg = _fill_template_vars(parsed_task.get("opening_line", "你好，我是客服。"))[:80]
+        # Normalize brand identity in opening line
+        agent_msg = agent_msg.replace("飞毛腿", "美团配送")
         history.append({"role": "assistant", "content": agent_msg})
         state_tracker.observe_agent(0, agent_msg)
 

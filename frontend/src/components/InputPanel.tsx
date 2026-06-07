@@ -154,65 +154,43 @@ export function InputPanel() {
           </aside>
 
           <details className="api-docs-panel">
-            <summary>API 接入文档 & 版本对比</summary>
+            <summary>批量评测控制台 & API 接入</summary>
             <div className="api-docs-content">
               <div className="api-section">
-                <h4>批量评测 API</h4>
+                <h4>批量提交</h4>
                 <pre className="api-code">{`POST /api/batch-evaluate
-Content-Type: application/json
-
-{
-  "tasks": [
-    {"instruction": "任务指令文本1", "budget": 12},
-    {"instruction": "任务指令文本2", "budget": 12}
-  ],
-  "config": {
-    "max_turns": 6,
-    "warmup_ratio": 0.6,
-    "parallel": true
-  }
-}
-
-Response 200:
-{
-  "batch_id": "batch_20260607_001",
-  "status": "completed",
-  "results": [
-    {
-      "task_id": "task_001",
-      "score": 59.8,
-      "pass_status": "CAPPED_P1",
-      "coverage": {...},
-      "report_url": "/reports/batch_20260607_001/task_001.json"
-    }
-  ],
-  "summary": {
-    "avg_score": 62.3,
-    "pass_rate": 0.4,
-    "common_failures": ["p1_no_verification_path"]
-  }
-}`}</pre>
+{ "tasks": [{"instruction": "任务1"}, {"instruction": "任务2"}],
+  "config": {"max_turns": 6, "warmup_ratio": 0.75} }
+→ {"batch_id": "batch_001", "status": "queued", "task_count": 2}`}</pre>
               </div>
               <div className="api-section">
-                <h4>A/B 版本对比评测</h4>
-                <p className="api-desc">对比不同版本数字人在相同任务集下的覆盖率、违规数和评分差异</p>
-                <pre className="api-code">{`POST /api/compare
-{
-  "instruction": "任务指令文本",
-  "model_a": {"name": "v2.1", "endpoint": "..."},
-  "model_b": {"name": "v2.2", "endpoint": "..."},
-  "scenarios": 12
-}
+                <h4>状态查询 & 失败重试</h4>
+                <pre className="api-code">{`GET /api/batch-evaluate/batch_001/status
+→ {"status": "partial", "completed": 1, "failed": 1, "pending": 0}
 
-Response:
-{
-  "model_a": {"score": 48.5, "p0": 0, "p1": 2, "edge_coverage": 0.56},
-  "model_b": {"score": 67.2, "p0": 0, "p1": 1, "edge_coverage": 0.72},
-  "improvements": [
-    "v2.2 新增身份验证话术 → p1_no_verification_path 消除",
-    "v2.2 边覆盖提升16%：busy_handling→closing 路径打通"
-  ]
-}`}</pre>
+POST /api/batch-evaluate/batch_001/retry
+→ {"retried": 1, "status": "running"}`}</pre>
+              </div>
+              <div className="api-section">
+                <h4>批量报告 & 版本对比</h4>
+                <pre className="api-code">{`GET /api/batch-evaluate/batch_001/report
+→ {"avg_score": 62.3, "pass_rate": 0.4,
+   "common_failures": ["p1_no_verification_path"],
+   "per_task": [{...}, {...}]}
+
+POST /api/compare
+{"instruction": "...", "model_a": "v2.1", "model_b": "v2.2"}
+→ {"delta_score": +18.7, "delta_p1": -1,
+   "improvements": ["新增身份验证话术→P1消除"]}`}</pre>
+              </div>
+              <div className="api-section">
+                <h4>复测闭环</h4>
+                <p className="api-desc">修改数字人prompt后一键复测，对比分数/违规/覆盖变化</p>
+                <pre className="api-code">{`POST /api/retest
+{"instruction": "...", "baseline_eval_id": "eval_xxx"}
+→ {"before": {"score": 48.5, "p1": 2, "risk_cov": 0.75},
+   "after":  {"score": 67.2, "p1": 1, "risk_cov": 0.88},
+   "diff": "+18.7分, -1个P1, +13%风险覆盖"}`}</pre>
               </div>
             </div>
           </details>
