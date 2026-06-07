@@ -109,5 +109,13 @@ export interface ScoreState {
     cap_rule: string
     final_score: number
     formula: string
+    evidence?: {
+      task_completion?: { satisfied_count: number; satisfied_ids: string[] }
+      flow_state_adherence?: { visited_states: string[] }
+      constraint_compliance?: { violation_count: number; violation_ids: string[] }
+      branch_handling?: { branches_hit: string[] }
+      context_consistency?: { repeat_violation_in: string[] }
+      communication_experience?: { avg_turns: number; scenario_count: number }
+    }
   }
 }

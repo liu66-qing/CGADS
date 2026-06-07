@@ -152,6 +152,42 @@ KEY_INFO_TEST_TEMPLATE = {
     "coverage_targets": ["risk:p1_key_info_omission", "risk:p1_faq_wrong_fact"],
 }
 
+LATE_REFUSAL_TEMPLATE = {
+    "name": "中途拒绝型-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你前2轮配合听完说明，第3轮突然说'算了不需要了/不做了'明确拒绝",
+    "intent_distribution": {"cooperative": 0.4, "question": 0.2, "refusal": 0.4},
+    "stop_after_turns": 5,
+    "coverage_targets": ["edge:opening->inform", "edge:inform->refusal_exit", "risk:p1_end_condition_error"],
+}
+
+FAQ_THEN_REFUSE_TEMPLATE = {
+    "name": "问后拒绝型-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你先问问题进入FAQ阶段，听完回答后说'不感兴趣/算了'拒绝",
+    "intent_distribution": {"question": 0.4, "cooperative": 0.2, "refusal": 0.4},
+    "stop_after_turns": 5,
+    "coverage_targets": ["edge:inform->faq_handling", "edge:faq_handling->refusal_exit"],
+}
+
+BUSY_THEN_COOPERATE_TEMPLATE = {
+    "name": "忙转配合型-{suffix}",
+    "persona": "你是{role_target}，正在{busy_context}但不太急",
+    "behavior": "你第1轮说在忙，但对方简短说明后你说'好吧你说吧/行简单说'转为配合",
+    "intent_distribution": {"busy": 0.4, "cooperative": 0.5, "question": 0.1},
+    "stop_after_turns": 6,
+    "coverage_targets": ["edge:opening->busy_handling", "edge:busy_handling->inform", "edge:inform->intent_confirm"],
+}
+
+CONFIRM_THEN_REFUSE_TEMPLATE = {
+    "name": "确认反悔型-{suffix}",
+    "persona": "你是{role_target}，接到{role_caller}电话",
+    "behavior": "你前面配合到确认阶段，但确认时说'我再想想/算了不行/不做了'反悔拒绝",
+    "intent_distribution": {"cooperative": 0.5, "question": 0.1, "refusal": 0.4},
+    "stop_after_turns": 6,
+    "coverage_targets": ["edge:opening->inform", "edge:inform->intent_confirm", "edge:intent_confirm->refusal_exit"],
+}
+
 
 def _infer_role_info(dsl: TaskDSL) -> dict[str, str]:
     """从 DSL 推断角色与目标对象。"""
@@ -232,6 +268,13 @@ def generate_base_scenarios(dsl: TaskDSL) -> list[dict[str, Any]]:
     for tmpl in [IMPATIENT_TEMPLATE, REPEAT_CONFIRM_TEMPLATE, BEYOND_SCOPE_TEMPLATE, INTERRUPTING_TEMPLATE]:
         s = dict(tmpl)
         s["name"] = s["name"].format(suffix="extra")
+        s["persona"] = s["persona"].format(**info)
+        scenarios.append(s)
+
+    # 边覆盖专项（触发难达路径）
+    for tmpl in [LATE_REFUSAL_TEMPLATE, FAQ_THEN_REFUSE_TEMPLATE, BUSY_THEN_COOPERATE_TEMPLATE, CONFIRM_THEN_REFUSE_TEMPLATE]:
+        s = dict(tmpl)
+        s["name"] = s["name"].format(suffix="edge")
         s["persona"] = s["persona"].format(**info)
         scenarios.append(s)
 

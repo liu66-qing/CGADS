@@ -152,6 +152,70 @@ export function InputPanel() {
               <small>多任务并发 · JSON/API接入 · 最多20条/次</small>
             </div>
           </aside>
+
+          <details className="api-docs-panel">
+            <summary>API 接入文档 & 版本对比</summary>
+            <div className="api-docs-content">
+              <div className="api-section">
+                <h4>批量评测 API</h4>
+                <pre className="api-code">{`POST /api/batch-evaluate
+Content-Type: application/json
+
+{
+  "tasks": [
+    {"instruction": "任务指令文本1", "budget": 12},
+    {"instruction": "任务指令文本2", "budget": 12}
+  ],
+  "config": {
+    "max_turns": 6,
+    "warmup_ratio": 0.6,
+    "parallel": true
+  }
+}
+
+Response 200:
+{
+  "batch_id": "batch_20260607_001",
+  "status": "completed",
+  "results": [
+    {
+      "task_id": "task_001",
+      "score": 59.8,
+      "pass_status": "CAPPED_P1",
+      "coverage": {...},
+      "report_url": "/reports/batch_20260607_001/task_001.json"
+    }
+  ],
+  "summary": {
+    "avg_score": 62.3,
+    "pass_rate": 0.4,
+    "common_failures": ["p1_no_verification_path"]
+  }
+}`}</pre>
+              </div>
+              <div className="api-section">
+                <h4>A/B 版本对比评测</h4>
+                <p className="api-desc">对比不同版本数字人在相同任务集下的覆盖率、违规数和评分差异</p>
+                <pre className="api-code">{`POST /api/compare
+{
+  "instruction": "任务指令文本",
+  "model_a": {"name": "v2.1", "endpoint": "..."},
+  "model_b": {"name": "v2.2", "endpoint": "..."},
+  "scenarios": 12
+}
+
+Response:
+{
+  "model_a": {"score": 48.5, "p0": 0, "p1": 2, "edge_coverage": 0.56},
+  "model_b": {"score": 67.2, "p0": 0, "p1": 1, "edge_coverage": 0.72},
+  "improvements": [
+    "v2.2 新增身份验证话术 → p1_no_verification_path 消除",
+    "v2.2 边覆盖提升16%：busy_handling→closing 路径打通"
+  ]
+}`}</pre>
+              </div>
+            </div>
+          </details>
         </form>
       )}
     </section>

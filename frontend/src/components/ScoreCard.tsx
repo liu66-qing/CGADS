@@ -142,6 +142,43 @@ export function ScoreCard() {
               <tr><td colSpan={3}>最终得分</td><td><strong>{score.scoringBreakdown.final_score}</strong></td></tr>
             </tfoot>
           </table>
+          {score.scoringBreakdown.evidence && (
+            <div className="evidence-trails">
+              <h4>维度证据链</h4>
+              <div className="evidence-grid">
+                {score.scoringBreakdown.evidence.flow_state_adherence && (
+                  <div className="evidence-item">
+                    <span className="evidence-label">流程遵循</span>
+                    <span className="evidence-value">覆盖状态: {score.scoringBreakdown.evidence.flow_state_adherence.visited_states?.join(', ')}</span>
+                  </div>
+                )}
+                {score.scoringBreakdown.evidence.task_completion && (
+                  <div className="evidence-item">
+                    <span className="evidence-label">任务完成</span>
+                    <span className="evidence-value">满足 {score.scoringBreakdown.evidence.task_completion.satisfied_count} 项需求</span>
+                  </div>
+                )}
+                {score.scoringBreakdown.evidence.branch_handling && (
+                  <div className="evidence-item">
+                    <span className="evidence-label">分支处理</span>
+                    <span className="evidence-value">命中: {score.scoringBreakdown.evidence.branch_handling.branches_hit?.join(', ') || '无'}</span>
+                  </div>
+                )}
+                {score.scoringBreakdown.evidence.constraint_compliance && (
+                  <div className="evidence-item">
+                    <span className="evidence-label">约束合规</span>
+                    <span className="evidence-value">违规 {score.scoringBreakdown.evidence.constraint_compliance.violation_count} 项: {score.scoringBreakdown.evidence.constraint_compliance.violation_ids?.join(', ') || '无'}</span>
+                  </div>
+                )}
+                {(score.scoringBreakdown.evidence.context_consistency?.repeat_violation_in?.length ?? 0) > 0 && (
+                  <div className="evidence-item">
+                    <span className="evidence-label">上下文一致</span>
+                    <span className="evidence-value">重复违规场景: {score.scoringBreakdown.evidence.context_consistency!.repeat_violation_in!.join(', ')}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </details>
       )}
       {score.credibilityBoundary && (

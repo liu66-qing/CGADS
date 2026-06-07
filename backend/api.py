@@ -324,8 +324,8 @@ DIMENSION_DISPLAY = {
 def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Interleave risk-covering and edge-covering scenarios for balanced coverage.
 
-    Strategy: put P0 risk first, then ensure at least one cooperative+question scenario
-    appears before position 5 (for edge coverage), then remaining P1 and others.
+    Strategy: P0 risk first, then edge-heavy (cooperative/question), then edge-diverse
+    scenarios that target unique edges not yet covered, then remaining P1 and others.
     """
     p0_risk = []
     edge_heavy = []  # scenarios with 2+ edge targets (cooperative, question)
@@ -347,15 +347,29 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
         else:
             others.append(scenario)
 
-    # Interleave: P0 first (2-3), then 2 edge-heavy (cooperative+question), then P1, then others
+    # Interleave: P0 first (2-3), then edge-heavy for path diversity, then P1, then others
     result = []
     result.extend(p0_risk[:3])
-    result.extend(edge_heavy[:2])  # cooperative + question for edge coverage
+    result.extend(edge_heavy[:3])  # cooperative + question + edge-targeted scenarios
     result.extend(p1_risk)
     result.extend(p0_risk[3:])
-    result.extend(edge_heavy[2:])
+    result.extend(edge_heavy[3:])
     result.extend(others)
-    return result
+
+    # Edge-diversity pass: move scenarios with unique edge targets towards the front
+    # to maximize edge coverage in Round1 (which typically takes top 8)
+    seen_edges: set[str] = set()
+    prioritized = []
+    deferred = []
+    for s in result:
+        targets = [str(t) for t in s.get("coverage_targets", [])]
+        new_edges = [t for t in targets if t.startswith("edge:") and t not in seen_edges]
+        if new_edges:
+            prioritized.append(s)
+            seen_edges.update(new_edges)
+        else:
+            deferred.append(s)
+    return prioritized + deferred
 
 
 # ============================================================
@@ -773,7 +787,7 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
         "credibility_boundary": _build_credibility_boundary(final_coverage, adequacy, total_p0, total_p1),
         "dimension_scores": dim_avg,
         "violations": all_violations,
-        "scoring_breakdown": _build_scoring_breakdown(dim_avg, total_p0, total_p1, round(avg_score, 1), pass_status),
+        "scoring_breakdown": _build_scoring_breakdown(dim_avg, total_p0, total_p1, round(avg_score, 1), pass_status, scenario_results=valid_results),
         "scenarios": [
             {
                 "id": r.get("scenario_id", ""),
@@ -788,8 +802,11 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     })
 
 
-def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_score: float, pass_status: str) -> dict[str, Any]:
-    """Build a transparent scoring breakdown showing weights, contributions, and cap rules."""
+def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_score: float, pass_status: str, scenario_results: list[dict] | None = None) -> dict[str, Any]:
+    """Build a transparent scoring breakdown showing weights, contributions, and cap rules.
+
+    Includes per-dimension evidence trails for full traceability.
+    """
     from src.calibration.audit import DIMENSION_WEIGHTS
     breakdown = []
     raw_total = 0.0
@@ -797,13 +814,14 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
         val = dim_avg.get(dim_name, 3.0)
         contribution = round(val / 5 * weight, 1)
         raw_total += contribution
-        breakdown.append({
+        entry = {
             "dimension": dim_name,
             "score": round(val, 1),
             "max": 5,
             "weight": weight,
             "contribution": contribution,
-        })
+        }
+        breakdown.append(entry)
     raw_total = round(raw_total, 1)
     cap_rule = "无封顶"
     if p0_count > 0:
@@ -814,6 +832,53 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
         cap_rule = f"P1封顶：存在2个P1违规，总分上限60分"
     elif p1_count == 1:
         cap_rule = f"P1封顶：存在1个P1违规，总分上限70分"
+
+    # Per-dimension evidence trails (aggregated from scenario_results)
+    evidence = {}
+    if scenario_results:
+        valid = [r for r in scenario_results if not r.get("error")]
+        # task_completion evidence
+        all_satisfied = set()
+        for r in valid:
+            all_satisfied.update(r.get("satisfied_requirements", []))
+        evidence["task_completion"] = {
+            "satisfied_count": len(all_satisfied),
+            "satisfied_ids": sorted(all_satisfied)[:10],
+        }
+        # flow_state_adherence evidence
+        all_states = set()
+        for r in valid:
+            for t in r.get("state_trace", []):
+                all_states.add(t.get("new_state", ""))
+        evidence["flow_state_adherence"] = {
+            "visited_states": sorted(all_states),
+        }
+        # constraint_compliance evidence
+        all_constraint_violations = []
+        for r in valid:
+            for v in r.get("constraint_violations", []):
+                all_constraint_violations.append(v)
+        evidence["constraint_compliance"] = {
+            "violation_count": len(set(all_constraint_violations)),
+            "violation_ids": sorted(set(all_constraint_violations))[:8],
+        }
+        # branch_handling evidence
+        branch_states = {"refusal_exit", "busy_handling", "faq_handling", "handoff_or_escalation"}
+        evidence["branch_handling"] = {
+            "branches_hit": sorted(all_states & branch_states),
+        }
+        # context_consistency evidence
+        repeat_scenarios = [r["scenario_id"] for r in valid if "no_repeat" in r.get("violation_rule_ids", []) + r.get("constraint_violations", [])]
+        evidence["context_consistency"] = {
+            "repeat_violation_in": repeat_scenarios[:5],
+        }
+        # communication_experience evidence
+        turns_per_scenario = [r.get("total_turns", 0) for r in valid]
+        evidence["communication_experience"] = {
+            "avg_turns": round(sum(turns_per_scenario) / max(len(turns_per_scenario), 1), 1),
+            "scenario_count": len(valid),
+        }
+
     return {
         "dimensions": breakdown,
         "raw_score": raw_total,
@@ -822,6 +887,7 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
         "cap_rule": cap_rule,
         "final_score": final_score,
         "formula": "总分 = Σ(维度得分/5 × 权重)，受P0/P1封顶",
+        "evidence": evidence,
     }
 
 

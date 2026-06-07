@@ -161,6 +161,9 @@ class StateTracker:
         if self.current_state == "intent_confirm":
             if any(kw in text for kw in ["确认", "记录", "已记录", "已确认"]):
                 updates.setdefault("intent_recorded", True)
+        if self.current_state == "faq_handling":
+            if any(kw in text for kw in ["还有什么问题", "其他问题", "解答完毕", "回答完了", "说完了", "没有其他"]):
+                updates.setdefault("all_questions_answered", True)
         self._apply_slots(updates)
         return updates
 
