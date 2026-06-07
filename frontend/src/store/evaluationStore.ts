@@ -271,6 +271,7 @@ export const useEvaluationStore = create<EvaluationStore>((set) => ({
           credibilityBoundary: data.credibility_boundary ?? undefined,
           round2Info: data.round2_info ?? undefined,
           scoringBreakdown: data.scoring_breakdown ?? undefined,
+          fixImpactEstimate: data.fix_impact_estimate ?? undefined,
         },
       }))
     }

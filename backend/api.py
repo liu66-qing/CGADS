@@ -324,11 +324,12 @@ DIMENSION_DISPLAY = {
 def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Interleave risk-covering and edge-covering scenarios for balanced coverage.
 
-    Strategy: P0 risk first, then edge-heavy (cooperative/question), then edge-diverse
-    scenarios that target unique edges not yet covered, then remaining P1 and others.
+    Strategy: ensure BOTH risk and edge coverage are maximized in Round1 (budget ~8-12).
+    Use a round-robin merge: take from P0, edge-heavy, P1 buckets in rotation
+    to guarantee both dimensions are well-represented in the first 8-12 positions.
     """
     p0_risk = []
-    edge_heavy = []  # scenarios with 2+ edge targets (cooperative, question)
+    edge_heavy = []  # scenarios with 2+ edge targets
     p1_risk = []
     others = []
 
@@ -340,36 +341,46 @@ def _risk_first_scenarios(scenarios: list[dict[str, Any]]) -> list[dict[str, Any
 
         if has_p0:
             p0_risk.append(scenario)
-        elif edge_count >= 2 and not has_p1:
+        elif edge_count >= 2:
             edge_heavy.append(scenario)
         elif has_p1:
             p1_risk.append(scenario)
         else:
             others.append(scenario)
 
-    # Interleave: P0 first (2-3), then edge-heavy for path diversity, then P1, then others
+    # Round-robin merge: P0(2) → edge(2) → P1(2) → P0(2) → edge(2) → P1(rest) → others
     result = []
-    result.extend(p0_risk[:3])
-    result.extend(edge_heavy[:3])  # cooperative + question + edge-targeted scenarios
-    result.extend(p1_risk)
-    result.extend(p0_risk[3:])
-    result.extend(edge_heavy[3:])
+    p0_i, edge_i, p1_i = 0, 0, 0
+
+    # Phase 1: first 6 slots — 2 P0, 2 edge-heavy, 2 P1
+    for _ in range(2):
+        if p0_i < len(p0_risk):
+            result.append(p0_risk[p0_i]); p0_i += 1
+    for _ in range(2):
+        if edge_i < len(edge_heavy):
+            result.append(edge_heavy[edge_i]); edge_i += 1
+    for _ in range(2):
+        if p1_i < len(p1_risk):
+            result.append(p1_risk[p1_i]); p1_i += 1
+
+    # Phase 2: next 6 slots — remaining P0, more edge, more P1
+    for _ in range(2):
+        if p0_i < len(p0_risk):
+            result.append(p0_risk[p0_i]); p0_i += 1
+    for _ in range(2):
+        if edge_i < len(edge_heavy):
+            result.append(edge_heavy[edge_i]); edge_i += 1
+    for _ in range(2):
+        if p1_i < len(p1_risk):
+            result.append(p1_risk[p1_i]); p1_i += 1
+
+    # Phase 3: everything remaining
+    result.extend(p0_risk[p0_i:])
+    result.extend(edge_heavy[edge_i:])
+    result.extend(p1_risk[p1_i:])
     result.extend(others)
 
-    # Edge-diversity pass: move scenarios with unique edge targets towards the front
-    # to maximize edge coverage in Round1 (which typically takes top 8)
-    seen_edges: set[str] = set()
-    prioritized = []
-    deferred = []
-    for s in result:
-        targets = [str(t) for t in s.get("coverage_targets", [])]
-        new_edges = [t for t in targets if t.startswith("edge:") and t not in seen_edges]
-        if new_edges:
-            prioritized.append(s)
-            seen_edges.update(new_edges)
-        else:
-            deferred.append(s)
-    return prioritized + deferred
+    return result
 
 
 # ============================================================
@@ -715,6 +726,10 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
     yield sse_event("stage_start", {"stage": "scoring", "label": "璇勬祴璇勫垎"})
 
     valid_results = [r for r in scenario_results if not r.get("error")]
+    # Inject DSL metadata into first result for scoring_breakdown to use
+    if valid_results:
+        valid_results[0]["_total_requirements"] = len(dsl.atomic_requirements)
+        valid_results[0]["_all_requirement_ids"] = [req.id for req in dsl.atomic_requirements]
     scores = [r.get("final_score", 0) for r in valid_results]
     avg_score = sum(scores) / len(scores) if scores else 0
 
@@ -799,7 +814,54 @@ async def run_evaluation_stream(request: EvalRequest) -> AsyncGenerator[str, Non
             for r in valid_results
         ],
         "suggestions": _generate_pipeline_suggestions(valid_results, final_coverage, all_violations),
+        "fix_impact_estimate": _estimate_fix_impact(round(avg_score, 1), pass_status, total_p0, total_p1, final_coverage, all_violations),
     })
+
+
+def _estimate_fix_impact(current_score: float, pass_status: str, p0: int, p1: int, coverage: dict, violations: list) -> dict[str, Any]:
+    """Estimate score improvement if top suggestions are implemented.
+
+    Provides a concrete 'before/after' to show the retest-loop value.
+    """
+    fixes = []
+    estimated_new_score = current_score
+
+    # Fix P1 violations → remove cap
+    if p1 > 0 and p0 == 0:
+        p1_rules = set(v.get("rule_id", "") for v in violations if "p1" in v.get("rule_id", ""))
+        fix_desc = f"修复{len(p1_rules)}条P1违规（{', '.join(list(p1_rules)[:3])}）"
+        # Without P1 cap, score could go to raw_score (approx +15-25 points)
+        score_gain = min(25, 100 - current_score) * 0.4
+        fixes.append({"fix": fix_desc, "expected_gain": f"+{score_gain:.0f}分", "priority": "P0"})
+        estimated_new_score += score_gain
+
+    # Fix risk coverage → more scenarios pass
+    risk_ratio = coverage.get("risk_coverage", {}).get("ratio", 0)
+    if risk_ratio < 0.7:
+        fixes.append({
+            "fix": "补充身份验证话术+官方验证路径，消除p1_no_verification_path",
+            "expected_gain": "+8-12分",
+            "priority": "P1",
+        })
+        estimated_new_score += 10
+
+    # Fix no_repeat → context+experience +2
+    rule_ids = set(v.get("rule_id", "") for v in violations)
+    if "no_repeat" in rule_ids:
+        fixes.append({
+            "fix": "增加上下文感知和话术轮换，消除重复回复",
+            "expected_gain": "+4-6分",
+            "priority": "P1",
+        })
+        estimated_new_score += 5
+
+    return {
+        "current_score": current_score,
+        "estimated_after_fix": min(100, round(estimated_new_score, 1)),
+        "pass_status_after_fix": "PASS" if p0 == 0 and estimated_new_score >= 70 else pass_status,
+        "fixes": fixes,
+        "retest_instruction": "按上述建议修改数字人prompt/话术后，重新运行评测验证分数提升",
+    }
 
 
 def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_score: float, pass_status: str, scenario_results: list[dict] | None = None) -> dict[str, Any]:
@@ -837,21 +899,32 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
     evidence = {}
     if scenario_results:
         valid = [r for r in scenario_results if not r.get("error")]
-        # task_completion evidence
+        # task_completion evidence — atomic requirement level
         all_satisfied = set()
         for r in valid:
             all_satisfied.update(r.get("satisfied_requirements", []))
+        total_req_count = scenario_results[0].get("_total_requirements", 0) if scenario_results else 0
+        all_req_ids = scenario_results[0].get("_all_requirement_ids", []) if scenario_results else []
+        missed_reqs = sorted(set(all_req_ids) - all_satisfied) if all_req_ids else []
         evidence["task_completion"] = {
             "satisfied_count": len(all_satisfied),
+            "total_count": total_req_count or len(all_satisfied),
             "satisfied_ids": sorted(all_satisfied)[:10],
+            "missed_ids": missed_reqs[:10],
+            "score_formula": f"{len(all_satisfied)}/{max(total_req_count, len(all_satisfied))} x 5 = {dim_avg.get('task_completion', 3.0)}",
         }
         # flow_state_adherence evidence
         all_states = set()
+        all_edges_hit = set()
         for r in valid:
             for t in r.get("state_trace", []):
                 all_states.add(t.get("new_state", ""))
+                if t.get("transition"):
+                    all_edges_hit.add(t["transition"])
         evidence["flow_state_adherence"] = {
             "visited_states": sorted(all_states),
+            "edges_triggered": sorted(all_edges_hit)[:12],
+            "score_formula": f"{len(all_states)}/9 states x 5 = {dim_avg.get('flow_state_adherence', 3.0)}",
         }
         # constraint_compliance evidence
         all_constraint_violations = []
@@ -861,16 +934,20 @@ def _build_scoring_breakdown(dim_avg: dict, p0_count: int, p1_count: int, final_
         evidence["constraint_compliance"] = {
             "violation_count": len(set(all_constraint_violations)),
             "violation_ids": sorted(set(all_constraint_violations))[:8],
+            "score_formula": f"5 - {len(set(all_constraint_violations))} violations = {dim_avg.get('constraint_compliance', 5.0)}",
         }
         # branch_handling evidence
         branch_states = {"refusal_exit", "busy_handling", "faq_handling", "handoff_or_escalation"}
         evidence["branch_handling"] = {
             "branches_hit": sorted(all_states & branch_states),
+            "branches_total": sorted(branch_states),
+            "score_formula": f"1 + {len(all_states & branch_states)} branches = {dim_avg.get('branch_handling', 1.0)}",
         }
         # context_consistency evidence
         repeat_scenarios = [r["scenario_id"] for r in valid if "no_repeat" in r.get("violation_rule_ids", []) + r.get("constraint_violations", [])]
         evidence["context_consistency"] = {
             "repeat_violation_in": repeat_scenarios[:5],
+            "score_formula": "2 (repeat detected)" if repeat_scenarios else "4 (no repeat)",
         }
         # communication_experience evidence
         turns_per_scenario = [r.get("total_turns", 0) for r in valid]
@@ -1099,9 +1176,29 @@ def _has_repeated_agent_reply(history: list[dict]) -> bool:
     return len(unique) < len(agent_msgs) * 0.7
 
 
+def _normalize_role(role: str) -> str:
+    """Normalize parsed role to standard identity (美团站长/客服).
+
+    Prevents brand drift like '飞毛腿客服专员' which confuses evaluators.
+    """
+    if not role:
+        return "美团客服"
+    # If role contains delivery/rider keywords, normalize to 美团站长
+    if any(kw in role for kw in ["站长", "站点", "骑手", "配送", "飞毛腿", "外卖"]):
+        return "美团配送站站长"
+    # If role contains course/training keywords
+    if any(kw in role for kw in ["课程", "培训", "教育", "直播"]):
+        return "美团学习平台客服"
+    # Generic fallback
+    if "客服" in role or "专员" in role:
+        return "美团客服"
+    return role
+
 def _build_agent_system_prompt(parsed_task: dict) -> str:
     """Build a rich system prompt for the simulated agent based on parsed task."""
     role = parsed_task.get("role", "客服")
+    # Normalize role identity to "美团站长/客服" for brand consistency
+    role = _normalize_role(role)
     goal = parsed_task.get("goal", "")
     max_len = parsed_task.get("max_reply_length", 30) or 30
     constraints = parsed_task.get("constraints", [])

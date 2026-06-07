@@ -207,6 +207,26 @@ export function ScoreCard() {
           </div>
         </div>
       )}
+      {(score as any).fixImpactEstimate && (
+        <div className="fix-impact plugin-card">
+          <h3>修复→复测闭环</h3>
+          <div className="fix-impact-summary">
+            <span className="fix-before">当前 {(score as any).fixImpactEstimate.current_score} 分</span>
+            <span className="fix-arrow">→</span>
+            <span className="fix-after">预计修复后 {(score as any).fixImpactEstimate.estimated_after_fix} 分</span>
+          </div>
+          <ul className="fix-list">
+            {(score as any).fixImpactEstimate.fixes?.map((f: any, i: number) => (
+              <li key={i}>
+                <span className="fix-priority">[{f.priority}]</span>
+                <span className="fix-desc">{f.fix}</span>
+                <span className="fix-gain">{f.expected_gain}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="fix-retest">{(score as any).fixImpactEstimate.retest_instruction}</p>
+        </div>
+      )}
     </section>
   )
 }
